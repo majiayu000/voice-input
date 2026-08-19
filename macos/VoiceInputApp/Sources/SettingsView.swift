@@ -28,26 +28,38 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 struct SettingsRootView: View {
     @ObservedObject var model: AppModel
     @State private var selection: SettingsSection? = .general
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsSection.allCases, selection: $selection) { item in
-                Label(item.title, systemImage: item.symbol).tag(item)
-            }
-            .navigationSplitViewColumnWidth(min: 150, ideal: 170, max: 210)
-        } detail: {
-            Group {
-                switch selection ?? .general {
-                case .general: GeneralSettings(model: model)
-                case .recognition: RecognitionSettings(model: model)
-                case .text: TextSettings(model: model)
-                case .diagnostics: DiagnosticsSettings(model: model)
+        ZStack(alignment: .topTrailing) {
+            NavigationSplitView {
+                List(SettingsSection.allCases, selection: $selection) { item in
+                    Label(item.title, systemImage: item.symbol).tag(item)
                 }
+                .navigationSplitViewColumnWidth(min: 150, ideal: 170, max: 210)
+            } detail: {
+                Group {
+                    switch selection ?? .general {
+                    case .general: GeneralSettings(model: model)
+                    case .recognition: RecognitionSettings(model: model)
+                    case .text: TextSettings(model: model)
+                    case .diagnostics: DiagnosticsSettings(model: model)
+                    }
+                }
+                .id(selection)
+                .transition(.opacity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if let message = model.toastMessage {
+                TransientNotice(message: message)
+                    .padding(16)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
         }
         .frame(minWidth: 720, minHeight: 500)
         .task { await model.refresh() }
+        .animation(reduceMotion ? nil : VoiceInputDesign.stateAnimation, value: selection)
+        .animation(reduceMotion ? nil : VoiceInputDesign.stateAnimation, value: model.toastMessage)
     }
 }
 
@@ -283,13 +295,30 @@ private struct DiagnosticsSettings: View {
                 }
                 .textSelection(.enabled)
                 if let error = snapshot.service.runtime?.lastError { InlineError(message: error) }
+                if let report = (snapshot.service.runtime ?? snapshot.recentRuntime)?.lastLatency {
+                    DisclosureGroup("查看分阶段耗时") {
+                        VStack(spacing: 0) {
+                            DiagnosticRow("录音", value: "\(report.captureMs) 毫秒")
+                            Divider()
+                            DiagnosticRow("本机识别", value: "\(report.finalizeMs) 毫秒")
+                            Divider()
+                            DiagnosticRow("文本处理", value: "\(report.refineMs) 毫秒")
+                            Divider()
+                            DiagnosticRow("写入", value: "\(report.insertMs) 毫秒")
+                            Divider()
+                            DiagnosticRow("丢弃音频块", value: "\(report.droppedChunks)")
+                        }
+                        .padding(.top, 8)
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                }
                 HStack {
                     Button("复制诊断信息") { model.copyDiagnostics() }
                     Button("在 Finder 中显示日志") { model.openLogs() }
                     Button("重新检查") { Task { await model.refresh() } }
                 }
             } else {
-                ProgressView("正在读取本地状态…")
+                LoadingRows(rows: 6)
             }
         }
     }

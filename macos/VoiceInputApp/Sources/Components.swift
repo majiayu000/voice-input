@@ -7,7 +7,7 @@ struct StatusMark: View {
     var body: some View {
         Text("听")
             .font(.custom("Songti SC", size: 12).weight(.semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(foreground)
             .frame(width: 22, height: 16)
             .background(background)
             .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
@@ -15,9 +15,13 @@ struct StatusMark: View {
     }
 
     private var background: Color {
-        if recording { return Color(red: 0.71, green: 0.14, blue: 0.09) }
+        if recording { return VoiceInputDesign.recording }
         if muted { return .secondary }
         return Color(nsColor: .labelColor)
+    }
+
+    private var foreground: Color {
+        recording ? .white : Color(nsColor: .windowBackgroundColor)
     }
 }
 
@@ -52,6 +56,66 @@ struct InlineError: View {
             .foregroundStyle(.red)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityLabel("出现问题：\(message)")
+    }
+}
+
+struct InlineSuccess: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "checkmark.circle.fill")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(VoiceInputDesign.success)
+            .accessibilityLabel("完成：\(message)")
+    }
+}
+
+struct TransientNotice: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "checkmark.circle.fill")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(.regularMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: VoiceInputDesign.cornerSmall)
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: VoiceInputDesign.cornerSmall))
+            .shadow(color: Color(nsColor: .shadowColor).opacity(0.12), radius: 10, y: 4)
+            .accessibilityAddTraits(.isStaticText)
+    }
+}
+
+struct LoadingRows: View {
+    var rows = 4
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<rows, id: \.self) { index in
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(nsColor: .quaternaryLabelColor))
+                        .frame(width: 18, height: 18)
+                    VStack(alignment: .leading, spacing: 5) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(nsColor: .quaternaryLabelColor))
+                            .frame(width: index.isMultiple(of: 2) ? 112 : 152, height: 9)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.65))
+                            .frame(width: 210, height: 7)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 10)
+                if index < rows - 1 { Divider() }
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("正在读取本地状态")
     }
 }
 

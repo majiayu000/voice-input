@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import QuartzCore
 import SwiftUI
 
 enum CandidateState: Equatable {
@@ -25,8 +26,8 @@ enum CandidateState: Equatable {
 
     var color: Color {
         switch self {
-        case .listening, .recognizing: Color(red: 0.71, green: 0.14, blue: 0.09)
-        case .completed: Color(red: 0.17, green: 0.42, blue: 0.27)
+        case .listening, .recognizing: VoiceInputDesign.recording
+        case .completed: VoiceInputDesign.success
         }
     }
 }
@@ -40,7 +41,7 @@ final class CandidateOverlayController {
 
     func update(runtime: RuntimeSnapshot?, completedNow: Bool) {
         if completedNow {
-            show(.completed)
+            show(.completed, runtime: runtime)
             dismissTask?.cancel()
             dismissTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1.1))
@@ -49,27 +50,56 @@ final class CandidateOverlayController {
             return
         }
         switch runtime?.phase {
-        case "capturing": show(.listening)
-        case "finalizing": show(.recognizing)
+        case "capturing": show(.listening, runtime: runtime)
+        case "finalizing": show(.recognizing, runtime: runtime)
         default:
             if panel?.isVisible == true, dismissTask == nil { hide() }
         }
     }
 
-    private func show(_ state: CandidateState) {
+    private func show(_ state: CandidateState, runtime: RuntimeSnapshot?) {
         dismissTask?.cancel()
         dismissTask = nil
         let size = NSSize(width: 286, height: 48)
         let panel = panel ?? makePanel(size: size)
-        panel.contentView = NSHostingView(rootView: CandidateStrip(state: state))
+        let elapsed = runtime.map { max(0, Int(Date().timeIntervalSince1970 * 1_000) - Int($0.updatedAtMs)) }
+        panel.contentView = NSHostingView(rootView: CandidateStrip(
+            state: state,
+            elapsedMilliseconds: elapsed,
+            completedText: state == .completed ? runtime?.lastText : nil
+        ))
         let origin = focusedInsertionOrigin(panelSize: size)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
-        panel.orderFrontRegardless()
+        if panel.isVisible {
+            panel.orderFrontRegardless()
+        } else if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            panel.orderFrontRegardless()
+        } else {
+            panel.alphaValue = 0
+            panel.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = VoiceInputDesign.transitionDuration
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+                panel.animator().alphaValue = 1
+            }
+        }
         self.panel = panel
     }
 
     private func hide() {
-        panel?.orderOut(nil)
+        guard let panel else { return }
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            panel.orderOut(nil)
+        } else {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.13
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.7, 0, 0.84, 0)
+                panel.animator().alphaValue = 0
+            } completionHandler: {
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+            }
+        }
         dismissTask = nil
     }
 
@@ -147,6 +177,8 @@ final class CandidateOverlayController {
 
 private struct CandidateStrip: View {
     let state: CandidateState
+    let elapsedMilliseconds: Int?
+    let completedText: String?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -154,15 +186,22 @@ private struct CandidateStrip: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(state.title)
                     .font(.system(size: 13, weight: .semibold))
-                Text(state.detail)
+                Text(completedText.map { "“\($0)”" } ?? state.detail)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer(minLength: 8)
-            Image(systemName: state == .completed ? "checkmark" : "ellipsis")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(state.color)
-                .accessibilityHidden(true)
+            if state == .completed {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(state.color)
+                    .accessibilityHidden(true)
+            } else {
+                Text(elapsedLabel)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 10)
         .frame(width: 286, height: 48)
@@ -170,5 +209,10 @@ private struct CandidateStrip: View {
         .overlay(Rectangle().stroke(state.color.opacity(0.9), lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(state.title)，\(state.detail)")
+    }
+
+    private var elapsedLabel: String {
+        let seconds = Double(elapsedMilliseconds ?? 0) / 1_000
+        return String(format: "%.1f", seconds)
     }
 }

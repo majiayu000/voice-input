@@ -13,6 +13,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var llmProbe: LLMProbe?
     @Published var launchAtLogin = false
+    @Published private(set) var toastMessage: String?
     @Published private(set) var downloadingPreset: String?
     @Published private(set) var modelProgress: Double?
 
@@ -21,6 +22,7 @@ final class AppModel: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var started = false
     private var lastSessionsCompleted: UInt64 = 0
+    private var toastTask: Task<Void, Never>?
 
     var runtimeState: AppRuntimeState {
         guard let snapshot else { return .starting }
@@ -93,13 +95,14 @@ final class AppModel: ObservableObject {
         do {
             let next = try await bridge.snapshot()
             let sessions = (next.service.runtime ?? next.recentRuntime)?.sessionsCompleted ?? 0
-            let completedNow = sessions > lastSessionsCompleted
+            let completedNow = snapshot != nil && sessions > lastSessionsCompleted
             lastSessionsCompleted = sessions
             snapshot = next
             CandidateOverlayController.shared.update(
                 runtime: next.service.runtime ?? next.recentRuntime,
                 completedNow: completedNow
             )
+            if completedNow { showToast("文字已写入") }
             if !silent { errorMessage = nil }
         } catch {
             if !silent { errorMessage = friendlyError(error.localizedDescription) }
@@ -108,10 +111,8 @@ final class AppModel: ObservableObject {
 
     func ensureInstalledAndStarted() async {
         await perform("正在准备 Voice Input") {
-            if self.snapshot?.service.installed != true {
-                try await self.bridge.installService()
-            }
             if self.snapshot?.service.loaded != true {
+                try await self.bridge.installService()
                 try await self.bridge.startService()
             }
         }
@@ -135,6 +136,7 @@ final class AppModel: ObservableObject {
                     try await self.bridge.startService()
                 }
             }
+            if errorMessage == nil { showToast("设置已保存") }
         }
     }
 
@@ -156,6 +158,7 @@ final class AppModel: ObservableObject {
             progressTask.cancel()
             modelProgress = nil
             downloadingPreset = nil
+            if errorMessage == nil { showToast("\(presetName(preset))已准备好") }
         }
     }
 
@@ -186,6 +189,16 @@ final class AppModel: ObservableObject {
                 try SMAppService.mainApp.unregister()
             }
             refreshLoginItemState()
+            switch SMAppService.mainApp.status {
+            case .enabled:
+                showToast("已设置登录时启动")
+            case .requiresApproval:
+                errorMessage = "还需要在“系统设置 → 通用 → 登录项”中允许 Voice Input。"
+            case .notRegistered, .notFound:
+                if !enabled { showToast("已关闭登录时启动") }
+            @unknown default:
+                errorMessage = "macOS 没有返回登录项状态，请稍后重试。"
+            }
         } catch {
             launchAtLogin = SMAppService.mainApp.status == .enabled
             errorMessage = "无法更新登录启动：\(error.localizedDescription)"
@@ -227,6 +240,7 @@ final class AppModel: ObservableObject {
                 """
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(raw + permissionText, forType: .string)
+                showToast("诊断信息已复制")
             } catch {
                 errorMessage = friendlyError(error.localizedDescription)
             }
@@ -236,6 +250,37 @@ final class AppModel: ObservableObject {
     func openLogs() {
         guard let path = snapshot?.service.paths.stderrLog else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    func copyRecentText() {
+        guard let text = activeRuntime?.lastText, !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        showToast("最近文字已复制")
+    }
+
+    func performPrimaryAction() {
+        switch runtimeState {
+        case .needsSetup:
+            showOnboarding()
+        case .error:
+            if permissions.ready {
+                Task {
+                    await perform("正在重新启动") {
+                        if self.snapshot?.service.installed != true {
+                            try await self.bridge.installService()
+                        }
+                        try await self.bridge.startService()
+                    }
+                }
+            } else {
+                showOnboarding()
+            }
+        case .paused:
+            toggleService()
+        case .starting, .ready, .listening, .recognizing:
+            break
+        }
     }
 
     func finishOnboarding() {
@@ -291,6 +336,16 @@ final class AppModel: ObservableObject {
                 .doubleValue ?? 0
             modelProgress = min(max(bytes / Double(model.sizeBytes), 0), 1)
             try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toastTask?.cancel()
+        toastMessage = message
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            self?.toastMessage = nil
         }
     }
 }

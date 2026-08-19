@@ -31,6 +31,12 @@ canonical Rust validation path. Long-running operations such as model download
 and service restart remain explicit Rust commands. This keeps Swift independent
 of TOML shape and keeps product presentation out of the speech core.
 
+The GUI owns login behavior through `SMAppService.mainApp`. The helper
+LaunchAgent is installed with `RunAtLoad=false` and `KeepAlive=false`; it starts
+only when the menu-bar application explicitly bootstraps and kickstarts it.
+This prevents the settings toggle from claiming the service is disabled while
+launchd silently starts it anyway.
+
 ## Objective
 
 Build a local-first, low-latency macOS dictation runtime whose audio path stays

@@ -55,6 +55,7 @@ struct OnboardingView: View {
     @ObservedObject var model: AppModel
     @State private var step: OnboardingStep = .privacy
     @State private var trialText = "把光标放在这里，然后按住 Fn 说话。"
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,6 +84,8 @@ struct OnboardingView: View {
                 case .launch: launchStep
                 }
             }
+            .id(step)
+            .transition(.opacity)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(28)
 
@@ -115,6 +118,7 @@ struct OnboardingView: View {
         }
         .frame(minWidth: 620, minHeight: 470)
         .task { await model.refresh() }
+        .animation(reduceMotion ? nil : VoiceInputDesign.stateAnimation, value: step)
     }
 
     private var privacyStep: some View {

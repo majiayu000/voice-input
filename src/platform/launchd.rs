@@ -121,6 +121,7 @@ impl ServiceManager for LaunchdServiceManager {
                     self.paths.launch_agent.to_string_lossy().as_ref(),
                 ],
             )?;
+            self.run_launchctl("kickstart", &["kickstart", "-k", &self.target()])?;
         }
         self.status()
     }
@@ -275,9 +276,9 @@ fn render_plist(paths: &ServicePaths) -> String {
     <string>daemon</string>
   </array>
   <key>RunAtLoad</key>
-  <true/>
+  <false/>
   <key>KeepAlive</key>
-  <true/>
+  <false/>
   <key>ProcessType</key>
   <string>Interactive</string>
   <key>ThrottleInterval</key>
@@ -380,7 +381,8 @@ mod tests {
         assert!(plist.contains("com.lifcc.voiceinput"));
         assert!(plist.contains("a&amp;b.toml"));
         assert!(plist.contains("<string>daemon</string>"));
-        assert!(plist.contains("<key>KeepAlive</key>"));
+        assert!(plist.contains("<key>RunAtLoad</key>\n  <false/>"));
+        assert!(plist.contains("<key>KeepAlive</key>\n  <false/>"));
     }
 
     #[test]

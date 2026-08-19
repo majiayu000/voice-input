@@ -24,5 +24,20 @@ struct VoiceInputApplication: App {
             SettingsRootView(model: model)
         }
         .windowResizability(.contentSize)
+
+        .commands {
+            CommandGroup(after: .appSettings) {
+                Button("复制最近一次文字") {
+                    model.copyRecentText()
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(model.activeRuntime?.lastText?.isEmpty != false)
+
+                Button("重新查看使用引导") {
+                    model.showOnboarding()
+                }
+                .keyboardShortcut("?", modifiers: [.command, .shift])
+            }
+        }
     }
 }

@@ -15,6 +15,7 @@ struct MenuBarLabel: View {
 
 struct MenuBarPanel: View {
     @ObservedObject var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,13 +25,38 @@ struct MenuBarPanel: View {
 
             Divider()
 
+            if model.isBusy, let label = model.busyLabel {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(label).font(.system(size: 12, weight: .medium))
+                    }
+                    if let progress = model.modelProgress {
+                        ProgressView(value: progress)
+                            .accessibilityLabel(label)
+                            .accessibilityValue("百分之\(Int(progress * 100))")
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                Divider()
+            }
+
             if let runtime = model.activeRuntime,
                let text = runtime.lastText,
                !text.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("最近一次")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("最近一次")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("复制") { model.copyRecentText() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .keyboardShortcut("c", modifiers: [.command, .shift])
+                    }
                     Text(text)
                         .font(.system(size: 13))
                         .lineLimit(3)
@@ -52,18 +78,38 @@ struct MenuBarPanel: View {
                 Divider()
             }
 
-            VStack(spacing: 2) {
-                Button(action: model.toggleService) {
-                    Label(
-                        model.snapshot?.service.loaded == true ? "暂停语音输入" : "恢复语音输入",
-                        systemImage: model.snapshot?.service.loaded == true ? "pause.circle" : "play.circle"
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if let toast = model.toastMessage {
+                InlineSuccess(message: toast)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .transition(.opacity)
+                Divider()
+            }
+
+            if showsPrimaryAction {
+                Button(action: model.performPrimaryAction) {
+                    Label(primaryActionTitle, systemImage: primaryActionSymbol)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
                 .disabled(model.isBusy)
+                Divider()
+            }
+
+            VStack(spacing: 2) {
+                if showsPauseAction {
+                    Button(action: model.toggleService) {
+                        Label("暂停语音输入", systemImage: "pause.circle")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .disabled(model.isBusy)
+                }
 
                 SettingsLink {
                     Label("设置…", systemImage: "gearshape")
@@ -72,6 +118,7 @@ struct MenuBarPanel: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
+                .keyboardShortcut(",", modifiers: .command)
 
                 Button(action: model.showOnboarding) {
                     Label("重新查看使用引导", systemImage: "questionmark.circle")
@@ -99,5 +146,39 @@ struct MenuBarPanel: View {
         }
         .frame(width: 300)
         .background(Color(nsColor: .windowBackgroundColor))
+        .animation(reduceMotion ? nil : VoiceInputDesign.stateAnimation, value: model.toastMessage)
+        .animation(reduceMotion ? nil : VoiceInputDesign.stateAnimation, value: model.runtimeState)
+    }
+
+    private var showsPrimaryAction: Bool {
+        switch model.runtimeState {
+        case .needsSetup, .paused, .error: true
+        default: false
+        }
+    }
+
+    private var showsPauseAction: Bool {
+        switch model.runtimeState {
+        case .ready, .listening, .recognizing: true
+        default: false
+        }
+    }
+
+    private var primaryActionTitle: String {
+        switch model.runtimeState {
+        case .needsSetup: "继续设置"
+        case .paused: "恢复语音输入"
+        case .error: "重试"
+        default: ""
+        }
+    }
+
+    private var primaryActionSymbol: String {
+        switch model.runtimeState {
+        case .needsSetup: "arrow.right.circle"
+        case .paused: "play.circle"
+        case .error: "arrow.clockwise.circle"
+        default: "circle"
+        }
     }
 }

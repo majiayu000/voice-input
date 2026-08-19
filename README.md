@@ -125,8 +125,10 @@ cargo build --release -p voice-input
 stable bundle identifier and microphone usage declaration, and writes
 `~/Library/LaunchAgents/com.lifcc.voiceinput.plist`. The LaunchAgent points at the
 bundle's helper; this gives macOS a stable privacy-permission subject instead of
-running an anonymous copied CLI. It does not start the service; the lifecycle
-remains explicit. `start` bootstraps or restarts it. Runtime health is atomically
+running an anonymous copied CLI. It does not start itself at login; the menu-bar
+application owns that user preference through `SMAppService` and explicitly
+starts the helper when it launches. `start` bootstraps and kickstarts the job or
+restarts it when already loaded. Runtime health is atomically
 published as JSON under the application data directory.
 Completed-session latency is appended under `metrics/latency.jsonl` in the same
 directory. `benchmark` summarizes the history; `benchmark --input <path>` can
