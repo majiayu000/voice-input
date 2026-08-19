@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-19T17:12:09Z",
+  "title": "Design System: Voice Input",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "neutral", "displayName": "Warm Ink" },
+      "muted-ink": { "role": "neutral", "displayName": "Muted Stone" },
+      "sheet": { "role": "neutral", "displayName": "Quiet Sheet" },
+      "surface": { "role": "neutral", "displayName": "System Surface" },
+      "divider": { "role": "neutral", "displayName": "Hairline" },
+      "status-mark": { "role": "neutral", "displayName": "Status Mark" },
+      "recording": { "role": "primary", "displayName": "Recording Red" },
+      "success": { "role": "secondary", "displayName": "Local Success Green" }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Window Title", "purpose": "Onboarding and settings section titles." },
+      "body": { "displayName": "System Body", "purpose": "Controls and explanatory copy." },
+      "label": { "displayName": "System Label", "purpose": "Secondary state and hints." },
+      "status-glyph": { "displayName": "Input Status Glyph", "purpose": "The single square 听 mark only." },
+      "metric": { "displayName": "Diagnostic Metric", "purpose": "Latency, model identifiers, and diagnostics." }
+    },
+    "shadows": [
+      {
+        "name": "detached-utility",
+        "value": "0 18px 40px rgba(40, 45, 55, 0.16)",
+        "purpose": "Detached menu, onboarding sheet, or cursor-adjacent candidate strip only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-change",
+        "value": "180ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Short opacity and color transitions between runtime states; disabled when Reduce Motion is enabled."
+      },
+      {
+        "name": "transient-dismiss",
+        "value": "220ms cubic-bezier(0.25, 1, 0.5, 1)",
+        "purpose": "Candidate-strip dismissal after successful insertion; becomes immediate with Reduce Motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-window",
+        "value": "560px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Status Mark",
+      "kind": "custom",
+      "refersTo": "status-mark",
+      "description": "Compact menu-bar input-source state with a single readable glyph.",
+      "html": "<span class=\"vi-status-mark\" aria-label=\"Voice Input 已就绪\">听</span>",
+      "css": ".vi-status-mark { display:grid; place-items:center; width:22px; height:16px; box-sizing:border-box; border:1px solid #1f1d1a; border-radius:2px; background:#1f1d1a; color:#f7f6f3; font:600 12px/1 'Songti SC', STSong, serif; } .vi-status-mark[data-state='recording'] { background:#b42318; border-color:#b42318; }"
+    },
+    {
+      "name": "Candidate Strip",
+      "kind": "custom",
+      "refersTo": "candidate-strip",
+      "description": "A cursor-adjacent transient status surface with words instead of a waveform.",
+      "html": "<div class=\"vi-candidate\" role=\"status\"><span class=\"vi-status-mark\">听</span><span><strong>正在听</strong><small>本机 · 松开 Fn 写入</small></span><time>0:04</time></div>",
+      "css": ".vi-candidate { display:flex; align-items:center; gap:10px; width:320px; padding:8px 10px; border:1px solid #b42318; border-radius:2px; background:#f7f6f3; color:#22201c; box-shadow:0 18px 40px rgba(40,45,55,.16); font:400 13px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; } .vi-candidate strong,.vi-candidate small { display:block; } .vi-candidate small,.vi-candidate time { color:#6f6a63; font-size:11px; } .vi-candidate time { margin-left:auto; font-family:'SF Mono', Menlo, monospace; }"
+    },
+    {
+      "name": "Settings Row",
+      "kind": "input",
+      "refersTo": "settings-row",
+      "description": "A flat, native-density settings row with a one-pixel separator.",
+      "html": "<label class=\"vi-row\"><span>登录时启动</span><input type=\"checkbox\" checked></label>",
+      "css": ".vi-row { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:32px; padding:9px 0; border-top:1px solid #dedbd4; color:#22201c; font:400 13px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; } .vi-row:focus-within { outline:2px solid Highlight; outline-offset:2px; }"
+    },
+    {
+      "name": "Recovery Action",
+      "kind": "button",
+      "refersTo": "action-button",
+      "description": "A direct text action used for permission recovery, retry, or diagnostics.",
+      "html": "<button class=\"vi-action\">打开系统设置</button>",
+      "css": ".vi-action { padding:6px 10px; border:0; border-radius:4px; background:transparent; color:#b42318; font:400 13px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; } .vi-action:hover { background:rgba(180,35,24,.08); } .vi-action:focus-visible { outline:2px solid Highlight; outline-offset:2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Native Input Method",
+    "overview": "Voice Input behaves like a quiet capability built into macOS. It stays almost invisible during daily use, becomes explicit only for setup or recovery, and uses the vocabulary of input sources and System Settings instead of standalone AI-product spectacle.",
+    "keyCharacteristics": [
+      "Native macOS density and controls",
+      "Square 听 status mark",
+      "Cursor-adjacent text status instead of waveforms",
+      "Rare semantic color",
+      "System-driven accessibility"
+    ],
+    "rules": [
+      { "name": "The Rare Signal Rule", "body": "Recording and success colors remain rare and never carry state alone.", "section": "colors" },
+      { "name": "The System Voice Rule", "body": "Use the macOS type scale and reserve Songti SC for the single status glyph.", "section": "typography" },
+      { "name": "The Structural Shadow Rule", "body": "Shadows explain detached physical layers and never decorate static settings content.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use native controls and plain-language state labels.",
+      "Do keep the local processing boundary visible.",
+      "Do provide keyboard, accessibility, contrast, and reduced-motion behavior."
+    ],
+    "donts": [
+      "Don't copy centered floating pills, continuous waveforms, or writing-assistant overlays.",
+      "Don't create a chatbot, document editor, or large dashboard.",
+      "Don't use decorative glass, gradients, neon, marketing metrics, or repetitive card grids."
+    ]
+  }
+}

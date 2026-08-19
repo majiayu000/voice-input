@@ -1,6 +1,7 @@
 pub mod asr;
 pub mod backend;
 pub mod config;
+pub mod control;
 pub mod domain;
 pub mod metrics;
 pub mod models;
@@ -14,6 +15,10 @@ pub mod status;
 mod tls;
 
 pub use config::{InsertionMode, VoiceConfig};
+pub use control::{
+    apply_settings_patch, build_control_snapshot, ControlSnapshot, SettingsPatch,
+    CONTROL_SCHEMA_VERSION,
+};
 pub use domain::{
     AudioChunk, Completion, EngineState, FeedbackCue, LatencyReport, RefineRequest, SessionContext,
     SessionId, Transcript, TranscriptUpdate,

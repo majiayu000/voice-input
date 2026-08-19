@@ -1,4 +1,7 @@
 /target/
+/dist/
+/macos/VoiceInputApp/.build/
+/.voice-input-app.*/
 .DS_Store
 .idea/
 .vscode/

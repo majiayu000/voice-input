@@ -30,6 +30,8 @@ pub struct RuntimeSnapshot {
     pub active_session: Option<String>,
     pub sessions_completed: u64,
     pub last_latency: Option<LatencyReport>,
+    #[serde(default)]
+    pub last_text: Option<String>,
     pub last_error: Option<String>,
 }
 
@@ -46,6 +48,7 @@ impl RuntimeSnapshot {
             active_session: None,
             sessions_completed: 0,
             last_latency: None,
+            last_text: None,
             last_error: None,
         }
     }

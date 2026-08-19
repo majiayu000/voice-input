@@ -1,5 +1,36 @@
 # Voice Input Architecture
 
+## Native Application Boundary
+
+The macOS application is a thin SwiftUI shell. It owns menu-bar presentation,
+first-run guidance, system permission affordances, login-item registration, and
+the cursor-adjacent transient status panel. The Rust executable remains the
+only owner of audio capture, Fn monitoring, VAD, Whisper, optional LLM
+refinement, text insertion, metrics, and LaunchAgent state.
+
+The boundary is a versioned JSON control plane rather than duplicated config
+models or direct TOML mutation:
+
+```text
+SwiftUI App
+  ├── RuntimeBridge (Process + Codable)
+  ├── PermissionService (macOS frameworks)
+  ├── CandidateOverlayController (read-only AX cursor location)
+  └── AppModel (presentation state)
+           │
+           ▼
+voice-input control snapshot / apply / test-refiner
+           │
+           ▼
+Rust config, service, model, runtime, and refiner modules
+```
+
+`control snapshot` is a read-only aggregate with an explicit schema version.
+`control apply` accepts a deny-unknown-fields patch and saves through the
+canonical Rust validation path. Long-running operations such as model download
+and service restart remain explicit Rust commands. This keeps Swift independent
+of TOML shape and keeps product presentation out of the speech core.
+
 ## Objective
 
 Build a local-first, low-latency macOS dictation runtime whose audio path stays

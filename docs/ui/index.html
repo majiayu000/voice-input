@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Voice Input</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-scene="ready" data-settings="general" data-onboard="privacy">
+    <div class="desktop">
+      <header class="menubar">
+        <div class="left">
+          <span class="apple" aria-hidden="true"></span>
+          <b>文本编辑</b>
+          <span>文件</span>
+          <span>编辑</span>
+          <span>格式</span>
+        </div>
+        <div class="right">
+          <span>周二 9:14</span>
+          <button class="ime-flag" id="tray-button" type="button" aria-label="Voice Input">听</button>
+        </div>
+      </header>
+
+      <section class="editor">
+        <div class="titlebar"><i></i><i></i><i></i><em>未命名</em></div>
+        <div class="page">
+          <p>今天先把辅助功能打开，再试按住 Fn。</p>
+          <p class="caret-line">
+            <span data-copy="typed"></span><span class="caret"></span>
+          </p>
+          <div class="candidate" id="hud">
+            <b class="ime-flag sm">听</b>
+            <div>
+              <strong data-copy="hud-title">正在听</strong>
+              <span data-copy="hud-sub">本机 · 松开 Fn 写入</span>
+            </div>
+            <time data-copy="hud-time">0:04</time>
+          </div>
+        </div>
+      </section>
+
+      <aside class="menu" id="menu-pop">
+        <header>
+          <b class="ime-flag">听</b>
+          <div>
+            <strong>Voice Input</strong>
+            <span data-copy="title">本机输入法 · 就绪</span>
+          </div>
+        </header>
+        <p class="hint" data-copy="hint">按住 Fn 说话。松开后写入当前光标。</p>
+        <p class="recent" data-copy="last">最近：本地语音链路已经贯通 <i>208 ms</i></p>
+        <ul>
+          <li><button type="button" class="only-ready">暂停</button></li>
+          <li><button type="button" class="only-ready" data-scene-link="settings">设置</button></li>
+          <li><button type="button" class="only-blocked go">打开系统设置</button></li>
+          <li><button type="button" class="only-error go">重试</button></li>
+          <li><button type="button" class="only-error" data-scene-link="settings">诊断</button></li>
+          <li><button type="button">退出</button></li>
+        </ul>
+        <p class="meta">Fn · 中文 · balanced · 不发送 LLM</p>
+      </aside>
+
+      <section class="sheet" id="onboard">
+        <h2>添加本机输入法</h2>
+        <ol class="progress">
+          <li data-step-dot="privacy">隐私</li>
+          <li data-step-dot="permission">权限</li>
+          <li data-step-dot="model">模型</li>
+          <li data-step-dot="trial">试说</li>
+          <li data-step-dot="login">启动</li>
+        </ol>
+        <div class="step" data-step="privacy">
+          <p>音频只在这台电脑识别。默认不保存录音，也不走 LLM。远程润色要你自己打开。</p>
+        </div>
+        <div class="step" data-step="permission">
+          <div class="row ok"><span>麦克风</span><em>已允许</em></div>
+          <div class="row"><span>辅助功能 · 写入当前输入框</span><button type="button">去设置</button></div>
+          <div class="row"><span>输入监控 · 监听 Fn</span><button type="button">去设置</button></div>
+        </div>
+        <div class="step" data-step="model">
+          <button type="button" class="pick">Fast · 32 MB · 试通路</button>
+          <button type="button" class="pick on">Balanced · 181 MB · 日常中英</button>
+          <button type="button" class="pick">Quality · 547 MB · 更准</button>
+        </div>
+        <div class="step" data-step="trial">
+          <p>光标在「未命名」里。按住 Fn 说一句，松开后应写在光标处。</p>
+        </div>
+        <div class="step" data-step="login">
+          <label><input type="checkbox" checked /> 登录时启动，不占 Dock</label>
+        </div>
+        <footer>
+          <button type="button" id="onboard-back">上一步</button>
+          <button type="button" id="onboard-next">继续</button>
+        </footer>
+      </section>
+
+      <section class="sheet prefs" id="settings">
+        <nav>
+          <button type="button" data-tab="general">常规</button>
+          <button type="button" data-tab="asr">识别</button>
+          <button type="button" data-tab="text">文本</button>
+          <button type="button" data-tab="diag">诊断</button>
+        </nav>
+        <div class="pane" data-pane="general">
+          <label>按住说话 <select><option>Fn</option><option>Control + Shift + Space</option></select></label>
+          <label>提示音 <input type="checkbox" checked /></label>
+          <label>登录时启动 <input type="checkbox" checked /></label>
+          <label>暂停 <input type="checkbox" /></label>
+        </div>
+        <div class="pane" data-pane="asr">
+          <button type="button" class="pick">Fast · 32 MB</button>
+          <button type="button" class="pick on">Balanced · 181 MB</button>
+          <button type="button" class="pick">Quality · 547 MB</button>
+          <label>语言 <select><option>自动</option><option selected>中文</option><option>English</option></select></label>
+        </div>
+        <div class="pane" data-pane="text">
+          <label>OpenAI 兼容润色 <input type="checkbox" /></label>
+          <label>地址 <input value="http://127.0.0.1:11434/v1" disabled /></label>
+          <label>密钥环境变量 <input placeholder="LOCAL_LLM_API_KEY" disabled /></label>
+        </div>
+        <div class="pane" data-pane="diag">
+          <dl>
+            <div><dt>服务</dt><dd>ready</dd></div>
+            <div><dt>模型</dt><dd>ggml-small-q5_1.bin</dd></div>
+            <div><dt>权限</dt><dd>麦克风 / 辅助功能 / 输入监控</dd></div>
+            <div><dt>最近</dt><dd>asr 196 ms · 写入 12 ms</dd></div>
+          </dl>
+          <button type="button">复制诊断</button>
+        </div>
+      </section>
+    </div>
+
+    <nav class="rail">
+      <span>画面</span>
+      <button type="button" data-scene-link="ready">就绪</button>
+      <button type="button" data-scene-link="listening">正在听</button>
+      <button type="button" data-scene-link="recognizing">识别</button>
+      <button type="button" data-scene-link="done">已写入</button>
+      <button type="button" data-scene-link="blocked">权限</button>
+      <button type="button" data-scene-link="error">出错</button>
+      <button type="button" data-scene-link="onboarding">引导</button>
+      <button type="button" data-scene-link="settings">设置</button>
+    </nav>
+    <script src="app.js"></script>
+  </body>
+</html>

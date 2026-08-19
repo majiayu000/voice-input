@@ -1,6 +1,7 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
@@ -96,6 +97,21 @@ enum Command {
         #[arg(long)]
         stdout: bool,
     },
+    /// Versioned JSON control plane for the macOS application.
+    Control {
+        #[command(subcommand)]
+        command: ControlCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ControlCommand {
+    /// Print one aggregate GUI snapshot as JSON.
+    Snapshot,
+    /// Apply a SettingsPatch JSON object read from standard input.
+    Apply,
+    /// Send a short user-initiated probe through the configured LLM refiner.
+    TestRefiner,
 }
 
 #[derive(Debug, Subcommand)]
@@ -334,6 +350,56 @@ fn main() -> anyhow::Result<()> {
             let config = load_config(config_path.as_deref())?;
             run_daemon(config, config_path.as_deref(), mock_text, stdout)?;
         }
+        Command::Control { command } => match command {
+            ControlCommand::Snapshot => {
+                let config = load_config(config_path.as_deref())?;
+                let config_path = config_path
+                    .clone()
+                    .unwrap_or_else(VoiceConfig::default_path);
+                let paths = ServicePaths::discover(Some(&config_path))?;
+                let service = service_manager(Some(&config_path))?.status()?;
+                let snapshot =
+                    voice_input::build_control_snapshot(&config, &config_path, &paths, service);
+                println!("{}", serde_json::to_string_pretty(&snapshot)?);
+            }
+            ControlCommand::Apply => {
+                let mut input = String::new();
+                std::io::stdin().read_to_string(&mut input)?;
+                anyhow::ensure!(!input.trim().is_empty(), "settings patch JSON is empty");
+                let patch: voice_input::SettingsPatch = serde_json::from_str(&input)?;
+                let (_, saved) = voice_input::apply_settings_patch(config_path.as_deref(), patch)?;
+                println!("{}", serde_json::json!({ "saved": saved }));
+            }
+            ControlCommand::TestRefiner => {
+                let mut config = load_config(config_path.as_deref())?;
+                anyhow::ensure!(
+                    config.refiner.backend == RefinerBackend::OpenaiCompatible,
+                    "LLM refinement is not enabled"
+                );
+                config.refiner.failure_mode = voice_input::config::RefinerFailureMode::Fail;
+                let model = config.refiner.model.clone();
+                let endpoint = config.refiner.base_url.clone();
+                let mut refiner = OpenAiCompatibleRefiner::new(&config.refiner)?;
+                let started = std::time::Instant::now();
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?;
+                let text = runtime.block_on(refiner.refine(voice_input::RefineRequest {
+                    transcript: "Voice Input connection test.".to_owned(),
+                    partials: Vec::new(),
+                }))?;
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "ok": true,
+                        "endpoint": endpoint,
+                        "model": model,
+                        "latency_ms": elapsed_ms(started.elapsed()),
+                        "response_chars": text.chars().count()
+                    })
+                );
+            }
+        },
     }
     Ok(())
 }

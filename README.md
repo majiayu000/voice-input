@@ -45,6 +45,53 @@ cargo run --release -p voice-input -- dictate --seconds 5 --stdout
 cargo run -p voice-input -- benchmark
 ```
 
+## macOS menu bar app
+
+The native SwiftUI application is the normal user-facing entry point. It keeps
+audio, ASR, refinement, and insertion in Rust and talks to that runtime through
+the versioned `control` JSON contract.
+
+Build and open a signed local application:
+
+```bash
+./scripts/run-macos-app.sh
+```
+
+After launch, look for the square `听` mark in the macOS menu bar. The first-run
+guide explains privacy, requests microphone / Accessibility / Input Monitoring
+permissions, lets the user select a local model, and provides a real Fn
+dictation trial. The application does not appear in the Dock. The built artifact
+is `dist/Voice Input.app`.
+
+Development builds use ad-hoc signing. A distributable build should set
+`VOICE_INPUT_CODESIGN_IDENTITY` to a stable Apple Development or Developer ID
+identity before running the build script. A stable identity matters because
+macOS privacy grants are attached to the signed application identity.
+
+Run the complete Rust and Swift verification suite with:
+
+```bash
+./scripts/check.sh
+```
+
+The UI source lives in `macos/VoiceInputApp`. It uses native system appearance,
+supports light and dark mode, preserves keyboard focus, honors Reduce Motion,
+and expresses state in text rather than color alone.
+
+## GUI control protocol
+
+The GUI does not edit TOML or inspect internal Rust modules. It uses stable JSON
+commands whose field names are versioned by `schema_version`:
+
+```bash
+voice-input control snapshot
+printf '%s' '{"hotkey":"fn","language":"zh"}' | voice-input control apply
+```
+
+`control test-refiner` performs a user-initiated OpenAI-compatible connection
+probe with failure bypass disabled, so the settings page cannot report a false
+success when the endpoint is unavailable.
+
 `model install` downloads into the application data directory, resumes an
 interrupted HTTP transfer, verifies the expected size and SHA-256, atomically
 publishes the model, and updates the canonical TOML configuration. No model is

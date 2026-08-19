@@ -211,6 +211,7 @@ where
                     Ok(Some(completion)) => {
                         self.snapshot.sessions_completed += 1;
                         self.snapshot.last_latency = Some(completion.latency.clone());
+                        self.snapshot.last_text = Some(completion.text.clone());
                         self.snapshot.last_error = None;
                         if let Err(error) = self.effects.latency.record(&completion.latency) {
                             tracing::warn!(%error, "failed to record latency sample");
@@ -271,6 +272,7 @@ where
             }
         }
         self.snapshot.active_session = None;
+        self.snapshot.last_text = None;
         self.snapshot.transition(RuntimePhase::Stopped);
         self.publish_status();
         self.emit_feedback(FeedbackCue::Stopped);
