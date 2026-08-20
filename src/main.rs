@@ -11,8 +11,9 @@ use voice_input::config::{AsrBackend, RefinerBackend};
 use voice_input::domain::ASR_SAMPLE_RATE;
 use voice_input::platform::{
     accessibility_is_trusted, install_hotkey, install_shutdown_handler, probe_audio_device,
-    record_wav, run_main_event_loop, AudioCapture, MacAudioCapture, MacClipboardInjector,
-    MacSystemFeedback, MainEventLoopHandle, PlatformServiceManager,
+    record_wav, request_permission, run_main_event_loop, system_permission_snapshot, AudioCapture,
+    MacAudioCapture, MacClipboardInjector, MacSystemFeedback, MainEventLoopHandle,
+    PlatformServiceManager,
 };
 use voice_input::ports::{Refiner, StreamingAsr, TextInjector};
 use voice_input::refiner::OpenAiCompatibleRefiner;
@@ -102,6 +103,11 @@ enum Command {
         #[command(subcommand)]
         command: ControlCommand,
     },
+    /// Inspect or request macOS permissions for this executable identity.
+    Permission {
+        #[command(subcommand)]
+        command: PermissionCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -112,6 +118,34 @@ enum ControlCommand {
     Apply,
     /// Send a short user-initiated probe through the configured LLM refiner.
     TestRefiner,
+}
+
+#[derive(Debug, Subcommand)]
+enum PermissionCommand {
+    /// Print the permission state for this exact executable identity.
+    Snapshot,
+    /// Request one permission and print the resulting state.
+    Request {
+        #[arg(value_enum)]
+        permission: PermissionArgument,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum PermissionArgument {
+    Microphone,
+    Accessibility,
+    InputMonitoring,
+}
+
+impl From<PermissionArgument> for voice_input::PermissionKind {
+    fn from(value: PermissionArgument) -> Self {
+        match value {
+            PermissionArgument::Microphone => Self::Microphone,
+            PermissionArgument::Accessibility => Self::Accessibility,
+            PermissionArgument::InputMonitoring => Self::InputMonitoring,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -400,6 +434,13 @@ fn main() -> anyhow::Result<()> {
                 );
             }
         },
+        Command::Permission { command } => {
+            let snapshot = match command {
+                PermissionCommand::Snapshot => system_permission_snapshot()?,
+                PermissionCommand::Request { permission } => request_permission(permission.into())?,
+            };
+            println!("{}", serde_json::to_string_pretty(&snapshot)?);
+        }
     }
     Ok(())
 }

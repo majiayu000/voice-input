@@ -40,13 +40,36 @@ actor RuntimeBridge {
         return try JSONDecoder.voiceInput.decode(LLMProbe.self, from: data)
     }
 
+    func permissionSnapshot(helperPath: String) async throws -> PermissionStatusSnapshot {
+        let data = try await run(
+            ["permission", "snapshot"],
+            executable: URL(fileURLWithPath: helperPath)
+        )
+        return try JSONDecoder.voiceInput.decode(PermissionStatusSnapshot.self, from: data)
+    }
+
+    func requestPermission(
+        _ permission: PermissionKind,
+        helperPath: String
+    ) async throws -> PermissionStatusSnapshot {
+        let data = try await run(
+            ["permission", "request", permission.cliArgument],
+            executable: URL(fileURLWithPath: helperPath)
+        )
+        return try JSONDecoder.voiceInput.decode(PermissionStatusSnapshot.self, from: data)
+    }
+
     func rawSnapshot() async throws -> String {
         let data = try await run(["control", "snapshot"])
         return String(decoding: data, as: UTF8.self)
     }
 
-    private func run(_ arguments: [String], input: Data? = nil) async throws -> Data {
-        let executable = helperURL
+    private func run(
+        _ arguments: [String],
+        input: Data? = nil,
+        executable: URL? = nil
+    ) async throws -> Data {
+        let executable = executable ?? helperURL
         return try await Task.detached(priority: .userInitiated) {
             guard FileManager.default.isExecutableFile(atPath: executable.path) else {
                 throw RuntimeBridgeError.helperMissing(executable.path)

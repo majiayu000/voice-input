@@ -191,6 +191,7 @@ fn unix_time_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{PermissionState, PermissionStatusSnapshot, PERMISSION_SCHEMA_VERSION};
 
     #[test]
     fn settings_patch_updates_only_named_fields() {
@@ -213,5 +214,25 @@ mod tests {
         assert_eq!(updated.asr.language, "zh");
         assert!(updated.refiner.api_key_env.is_none());
         assert_eq!(updated.audio.sample_rate, 16_000);
+    }
+
+    #[test]
+    fn permission_snapshot_serializes_stable_contract() {
+        let snapshot = PermissionStatusSnapshot {
+            schema_version: PERMISSION_SCHEMA_VERSION,
+            subject_executable: PathBuf::from(
+                "/tmp/Voice Input Runtime.app/Contents/MacOS/voice-input",
+            ),
+            microphone: PermissionState::Denied,
+            accessibility: PermissionState::Authorized,
+            input_monitoring: PermissionState::NotDetermined,
+        };
+
+        let value = serde_json::to_value(snapshot).unwrap();
+
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["microphone"], "denied");
+        assert_eq!(value["accessibility"], "authorized");
+        assert_eq!(value["input_monitoring"], "not_determined");
     }
 }

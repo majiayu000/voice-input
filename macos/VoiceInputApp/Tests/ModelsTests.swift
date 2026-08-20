@@ -16,6 +16,7 @@ final class ModelsTests: XCTestCase {
             "runtime": null,
             "paths": {
               "data_dir": "/tmp/data",
+              "binary": "/tmp/Voice Input Runtime.app/Contents/MacOS/voice-input",
               "config": "/tmp/config.toml",
               "stdout_log": "/tmp/out.log",
               "stderr_log": "/tmp/err.log",
@@ -58,6 +59,10 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(snapshot.settings.hotkey, "fn")
         XCTAssertEqual(snapshot.models.first?.active, true)
         XCTAssertEqual(snapshot.service.paths.stderrLog, "/tmp/err.log")
+        XCTAssertEqual(
+            snapshot.service.paths.binary,
+            "/tmp/Voice Input Runtime.app/Contents/MacOS/voice-input"
+        )
     }
 
     func testPatchUsesRustSnakeCaseKeys() throws {

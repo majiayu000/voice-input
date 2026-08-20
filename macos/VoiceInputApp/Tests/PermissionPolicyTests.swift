@@ -2,6 +2,27 @@ import XCTest
 @testable import VoiceInputApp
 
 final class PermissionPolicyTests: XCTestCase {
+    func testPermissionSnapshotDecodesHelperContract() throws {
+        let payload = #"""
+        {
+          "schema_version": 1,
+          "subject_executable": "/tmp/Voice Input Runtime.app/Contents/MacOS/voice-input",
+          "microphone": "denied",
+          "accessibility": "authorized",
+          "input_monitoring": "not_determined"
+        }
+        """#.data(using: .utf8)!
+
+        let snapshot = try JSONDecoder.voiceInput.decode(
+            PermissionStatusSnapshot.self,
+            from: payload
+        )
+
+        XCTAssertEqual(snapshot.microphone, .denied)
+        XCTAssertEqual(snapshot.accessibility, .authorized)
+        XCTAssertEqual(snapshot.inputMonitoring, .notDetermined)
+    }
+
     func testDefaultHotkeyDoesNotRequireInputMonitoring() {
         let requirements = PermissionRequirements(hotkey: "control+shift+space")
 

@@ -21,6 +21,7 @@ struct ServiceSnapshot: Decodable, Equatable {
 
 struct ServicePaths: Decodable, Equatable {
     let dataDir: String
+    let binary: String
     let config: String
     let stdoutLog: String
     let stderrLog: String

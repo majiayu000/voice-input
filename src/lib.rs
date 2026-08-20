@@ -5,6 +5,7 @@ pub mod control;
 pub mod domain;
 pub mod metrics;
 pub mod models;
+pub mod permissions;
 pub mod pipeline;
 pub mod platform;
 pub mod ports;
@@ -25,6 +26,9 @@ pub use domain::{
 };
 pub use metrics::{read_latency_history, FileLatencySink, LatencySample, LatencySummary};
 pub use models::{install_model, model_catalog, InstalledModel, ModelArtifact, ModelPreset};
+pub use permissions::{
+    PermissionKind, PermissionState, PermissionStatusSnapshot, PERMISSION_SCHEMA_VERSION,
+};
 pub use pipeline::VoiceEngine;
 pub use ports::{Feedback, LatencySink, Refiner, StreamingAsr, TextInjector};
 pub use runtime::{RuntimeCommand, RuntimeEffects, RuntimeExit, VoiceRuntime};

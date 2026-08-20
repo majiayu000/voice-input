@@ -4,9 +4,24 @@ use crate::domain::{AudioChunk, FeedbackCue, SessionId};
 use crate::ports::{Feedback, TextInjector};
 use crate::runtime::RuntimeCommand;
 use crate::service::{ServiceError, ServiceManager, ServicePaths, ServiceStatus};
+use crate::{PermissionKind, PermissionState, PermissionStatusSnapshot, PERMISSION_SCHEMA_VERSION};
 use async_trait::async_trait;
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+pub fn system_permission_snapshot() -> anyhow::Result<PermissionStatusSnapshot> {
+    Ok(PermissionStatusSnapshot {
+        schema_version: PERMISSION_SCHEMA_VERSION,
+        subject_executable: std::env::current_exe()?,
+        microphone: PermissionState::Unknown,
+        accessibility: PermissionState::Unknown,
+        input_monitoring: PermissionState::Unknown,
+    })
+}
+
+pub fn request_permission(_permission: PermissionKind) -> anyhow::Result<PermissionStatusSnapshot> {
+    anyhow::bail!("system permission requests are only supported on macOS")
+}
 
 const MESSAGE: &str = "voice-input currently supports macOS only";
 

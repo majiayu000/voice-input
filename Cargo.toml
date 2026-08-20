@@ -36,8 +36,10 @@ cpal = "0.16"
 global-hotkey = "0.7"
 macos-accessibility-client = "0.0.2"
 libc = "0.2"
+block2 = "0.6"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSPasteboard", "NSPasteboardItem", "NSRunningApplication", "NSSound", "NSWorkspace", "libc"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["AVCaptureDevice", "AVMediaFormat", "block2"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["NSArray", "NSData", "NSString"] }
 rubato = { version = "0.16.2", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

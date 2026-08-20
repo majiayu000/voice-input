@@ -102,6 +102,14 @@ enum PermissionKind: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var cliArgument: String {
+        switch self {
+        case .microphone: "microphone"
+        case .accessibility: "accessibility"
+        case .inputMonitoring: "input-monitoring"
+        }
+    }
+
     var title: String {
         switch self {
         case .microphone: "麦克风"

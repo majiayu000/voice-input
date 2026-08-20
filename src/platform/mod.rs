@@ -24,6 +24,9 @@ pub enum HotkeyEvent {
 mod macos;
 
 #[cfg(target_os = "macos")]
+mod permissions_macos;
+
+#[cfg(target_os = "macos")]
 mod launchd;
 
 #[cfg(target_os = "macos")]
@@ -36,14 +39,20 @@ pub use macos::{
 #[cfg(target_os = "macos")]
 pub use launchd::LaunchdServiceManager as PlatformServiceManager;
 
+#[cfg(target_os = "macos")]
+pub use permissions_macos::{
+    request as request_permission, snapshot as system_permission_snapshot,
+};
+
 #[cfg(not(target_os = "macos"))]
 mod unsupported;
 
 #[cfg(not(target_os = "macos"))]
 pub use unsupported::{
     accessibility_is_trusted, install_hotkey, install_shutdown_handler, probe_audio_device,
-    run_main_event_loop, MacAudioCapture, MacClipboardInjector, MacHotkeyGuard, MacSystemFeedback,
-    MainEventLoopHandle, PlatformServiceManager, ShutdownSignalGuard,
+    request_permission, run_main_event_loop, system_permission_snapshot, MacAudioCapture,
+    MacClipboardInjector, MacHotkeyGuard, MacSystemFeedback, MainEventLoopHandle,
+    PlatformServiceManager, ShutdownSignalGuard,
 };
 
 pub trait AudioCapture {
