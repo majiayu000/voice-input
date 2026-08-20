@@ -83,7 +83,7 @@ where
                 device = %device.name,
                 input_sample_rate = device.input_sample_rate,
                 output_sample_rate = device.output_sample_rate,
-                "microphone is warm and ready"
+                "microphone device is prepared; input remains inactive until the hotkey is pressed"
             ),
             Err(error) => {
                 self.snapshot.record_error(error.to_string());
