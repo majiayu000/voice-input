@@ -165,7 +165,7 @@ lands or their independent release/build cost becomes material.
 | P0 | signed app container plus launchd install/start/stop/status/uninstall | Implemented | Bundle/plist installer contract tests and structured status checks |
 | P0 | CLI and operator documentation | Implemented | CLI help and README command review |
 | P1 | Direct Accessibility insertion and complete pasteboard preservation | Implemented; broader app matrix remains a release gate | Multi-item/type round-trip test; TextEdit AX and fallback smoke |
-| P1 | Feedback adapter and configurable Fn/event-tap hotkey | Implemented | Runtime cue-order test; Fn key-code daemon smoke with a warm microphone |
+| P1 | Feedback adapter and configurable Fn/event-tap hotkey | Implemented | Runtime cue-order test; Fn key-code daemon smoke with microphone activation scoped to the pressed hotkey |
 | P1 | Latency history and benchmark harness | Implemented | Metrics tests and `voice-input benchmark [--input <jsonl>]` |
 | P2 | Local ASR provider, warm state, VAD, model supply | Implemented baseline; final-only decoding remains | Provider/VAD tests, pinned live download, WAV and microphone smoke |
 | P2 | Optional local/remote LLM refiners | Implemented | Success, timeout/bypass, URL and privacy contract tests |
