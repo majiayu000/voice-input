@@ -26,8 +26,6 @@
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
-  <key>NSMicrophoneUsageDescription</key>
-  <string>Voice Input 使用麦克风在本机识别你说的话。默认不保存录音。</string>
   <key>NSHumanReadableCopyright</key>
   <string>Copyright © 2026 Voice Input contributors.</string>
 </dict>

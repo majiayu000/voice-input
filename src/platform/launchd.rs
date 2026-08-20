@@ -1,11 +1,16 @@
 use crate::service::{ServiceError, ServiceManager, ServicePaths, ServiceStatus, SERVICE_LABEL};
 use crate::status::RuntimeSnapshot;
+use sha2::{Digest, Sha256};
 use std::fs::{OpenOptions, Permissions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
+
+const RUNTIME_BUNDLE_ID: &str = "com.lifcc.voiceinput.runtime";
+const RUNTIME_ENTITLEMENTS_FILE: &str = "Runtime.entitlements";
+const SOURCE_FINGERPRINT_FILE: &str = "source.sha256";
 
 pub struct LaunchdServiceManager {
     paths: ServicePaths,
@@ -90,13 +95,25 @@ impl ServiceManager for LaunchdServiceManager {
                 std::fs::create_dir_all(parent)?;
             }
         }
-        write_atomically(
-            &self.paths.app_bundle.join("Contents/Info.plist"),
-            render_app_info_plist().as_bytes(),
-            0o644,
-        )?;
-        copy_executable_atomically(executable, &self.paths.binary)?;
-        sign_app_bundle(&self.paths.app_bundle)?;
+        let source_fingerprint = file_sha256(executable)?;
+        let resources = self.paths.app_bundle.join("Contents/Resources");
+        let entitlements = resources.join(RUNTIME_ENTITLEMENTS_FILE);
+        let fingerprint = resources.join(SOURCE_FINGERPRINT_FILE);
+        if !installed_runtime_is_current(&self.paths, &source_fingerprint) {
+            write_atomically(
+                &self.paths.app_bundle.join("Contents/Info.plist"),
+                render_app_info_plist().as_bytes(),
+                0o644,
+            )?;
+            write_atomically(
+                &entitlements,
+                render_runtime_entitlements().as_bytes(),
+                0o644,
+            )?;
+            copy_executable_atomically(executable, &self.paths.binary)?;
+            sign_app_bundle(&self.paths.app_bundle, &entitlements)?;
+            write_atomically(&fingerprint, source_fingerprint.as_bytes(), 0o644)?;
+        }
         remove_if_exists(&self.paths.data_dir.join("bin/voice-input"))?;
         write_atomically(
             &self.paths.launch_agent,
@@ -172,15 +189,15 @@ fn render_app_info_plist() -> String {
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Voice Input</string>
+  <string>Voice Input Runtime</string>
   <key>CFBundleExecutable</key>
   <string>voice-input</string>
   <key>CFBundleIdentifier</key>
-  <string>com.lifcc.voiceinput</string>
+  <string>{RUNTIME_BUNDLE_ID}</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Voice Input</string>
+  <string>Voice Input Runtime</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -198,7 +215,19 @@ fn render_app_info_plist() -> String {
     )
 }
 
-fn sign_app_bundle(app_bundle: &Path) -> Result<(), ServiceError> {
+fn render_runtime_entitlements() -> &'static str {
+    r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+</dict>
+</plist>
+"#
+}
+
+fn sign_app_bundle(app_bundle: &Path, entitlements: &Path) -> Result<(), ServiceError> {
     let identity =
         std::env::var("VOICE_INPUT_CODESIGN_IDENTITY").unwrap_or_else(|_| "-".to_owned());
     let output = Command::new("/usr/bin/codesign")
@@ -208,6 +237,8 @@ fn sign_app_bundle(app_bundle: &Path) -> Result<(), ServiceError> {
             &identity,
             "--options",
             "runtime",
+            "--entitlements",
+            entitlements.to_string_lossy().as_ref(),
             "--timestamp=none",
         ])
         .arg(app_bundle)
@@ -221,6 +252,32 @@ fn sign_app_bundle(app_bundle: &Path) -> Result<(), ServiceError> {
     } else {
         detail
     }))
+}
+
+fn installed_runtime_is_current(paths: &ServicePaths, source_fingerprint: &str) -> bool {
+    let resources = paths.app_bundle.join("Contents/Resources");
+    let fingerprint = resources.join(SOURCE_FINGERPRINT_FILE);
+    paths.binary.is_file()
+        && std::fs::read_to_string(paths.app_bundle.join("Contents/Info.plist"))
+            .is_ok_and(|value| value == render_app_info_plist())
+        && std::fs::read_to_string(resources.join(RUNTIME_ENTITLEMENTS_FILE))
+            .is_ok_and(|value| value == render_runtime_entitlements())
+        && std::fs::read_to_string(fingerprint)
+            .is_ok_and(|value| value.trim() == source_fingerprint)
+}
+
+fn file_sha256(path: &Path) -> Result<String, ServiceError> {
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn remove_directory_if_exists(path: &Path) -> Result<(), ServiceError> {
@@ -369,6 +426,7 @@ fn remove_if_exists(path: &Path) -> Result<(), ServiceError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::MetadataExt;
 
     #[test]
     fn plist_uses_stable_paths_and_escapes_xml() {
@@ -427,13 +485,39 @@ mod tests {
         assert!(paths.launch_agent.is_file());
         let app_info =
             std::fs::read_to_string(paths.app_bundle.join("Contents/Info.plist")).unwrap();
-        assert!(app_info.contains("<string>com.lifcc.voiceinput</string>"));
+        assert!(app_info.contains("<string>com.lifcc.voiceinput.runtime</string>"));
         assert!(app_info.contains("<key>NSMicrophoneUsageDescription</key>"));
+        let entitlements = std::fs::read_to_string(
+            paths
+                .app_bundle
+                .join("Contents/Resources/Runtime.entitlements"),
+        )
+        .unwrap();
+        assert!(entitlements.contains("<key>com.apple.security.device.audio-input</key>"));
         let mode = std::fs::metadata(&paths.binary)
             .unwrap()
             .permissions()
             .mode()
             & 0o777;
         assert_eq!(mode, 0o755);
+    }
+
+    #[test]
+    fn reinstalling_identical_binary_preserves_installed_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ServicePaths::in_root(directory.path());
+        let source = directory.path().join("source-binary");
+        std::fs::write(&source, b"voice-input-test").unwrap();
+        let manager = LaunchdServiceManager {
+            paths: paths.clone(),
+            domain: "gui/0".to_owned(),
+        };
+
+        manager.install(&source).unwrap();
+        let first_inode = std::fs::metadata(&paths.binary).unwrap().ino();
+        manager.install(&source).unwrap();
+        let second_inode = std::fs::metadata(&paths.binary).unwrap().ino();
+
+        assert_eq!(first_inode, second_inode);
     }
 }

@@ -33,9 +33,15 @@ mkdir -p "$staging_app/Contents/Resources"
 /usr/bin/ditto "$swift_bin_dir/VoiceInputApp" "$staging_app/Contents/MacOS/Voice Input"
 /usr/bin/ditto "$project_root/target/release/voice-input" "$staging_app/Contents/Helpers/voice-input"
 /usr/bin/ditto "$package_dir/Resources/Info.plist" "$staging_app/Contents/Info.plist"
+/usr/bin/ditto "$package_dir/Resources/Runtime.entitlements" \
+  "$staging_app/Contents/Resources/Runtime.entitlements"
 chmod 755 "$staging_app/Contents/MacOS/Voice Input" "$staging_app/Contents/Helpers/voice-input"
 
-/usr/bin/codesign --force --sign "$signing_identity" --options runtime --timestamp=none \
+/usr/bin/codesign --force --sign "$signing_identity" \
+  --identifier com.lifcc.voiceinput.runtime \
+  --options runtime \
+  --entitlements "$package_dir/Resources/Runtime.entitlements" \
+  --timestamp=none \
   "$staging_app/Contents/Helpers/voice-input"
 /usr/bin/codesign --force --sign "$signing_identity" --options runtime --timestamp=none \
   "$staging_app"

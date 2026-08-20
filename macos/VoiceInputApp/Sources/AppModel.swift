@@ -138,10 +138,8 @@ final class AppModel: ObservableObject {
 
     func ensureInstalledAndStarted() async {
         await perform("正在准备 Voice Input") {
-            if self.snapshot?.service.loaded != true {
-                try await self.bridge.installService()
-                try await self.bridge.startService()
-            }
+            try await self.bridge.installService()
+            try await self.bridge.startService()
         }
     }
 
@@ -177,9 +175,7 @@ final class AppModel: ObservableObject {
             }
             await perform("正在下载并校验 \(presetName(preset))") {
                 try await self.bridge.installModel(preset)
-                if self.snapshot?.service.installed != true {
-                    try await self.bridge.installService()
-                }
+                try await self.bridge.installService()
                 try await self.bridge.startService()
             }
             progressTask.cancel()
