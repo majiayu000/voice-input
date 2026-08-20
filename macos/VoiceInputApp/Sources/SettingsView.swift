@@ -92,10 +92,6 @@ private struct GeneralSettings: View {
         SettingsPage(title: "常规") {
             StatusHeader(state: model.runtimeState, detail: model.runtimeDetail)
             Form {
-                Toggle("启用 Voice Input", isOn: Binding(
-                    get: { model.snapshot?.service.loaded == true },
-                    set: { _ in model.toggleService() }
-                ))
                 Picker("按住说话", selection: Binding(
                     get: { model.snapshot?.settings.hotkey ?? "fn" },
                     set: { model.apply(SettingsPatch(hotkey: $0)) }

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct StatusMark: View {
     var recording = false
-    var muted = false
 
     var body: some View {
         Text("听")
@@ -16,7 +15,6 @@ struct StatusMark: View {
 
     private var background: Color {
         if recording { return VoiceInputDesign.recording }
-        if muted { return .secondary }
         return Color(nsColor: .labelColor)
     }
 
@@ -32,8 +30,7 @@ struct StatusHeader: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             StatusMark(
-                recording: state == .listening || state == .recognizing,
-                muted: state == .paused
+                recording: state == .listening || state == .recognizing
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text(state.title)

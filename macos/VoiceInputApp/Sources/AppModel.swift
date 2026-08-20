@@ -43,7 +43,6 @@ final class AppModel: ObservableObject {
 
     var runtimeDetail: String {
         switch runtimeState {
-        case .paused: "恢复后即可按住 \(hotkeyDisplayName) 说话"
         case .ready: "按住 \(hotkeyDisplayName) 说话，松开后写入"
         case .listening: "松开 \(hotkeyDisplayName) 后写入当前光标"
         default: runtimeState.detail
@@ -67,7 +66,9 @@ final class AppModel: ObservableObject {
         guard snapshot.service.installed else {
             return .needsSetup("本地运行组件尚未安装")
         }
-        guard snapshot.service.loaded else { return .paused }
+        guard snapshot.service.loaded else {
+            return .error("本地运行组件未启动。请重试。")
+        }
         guard let runtime = liveRuntime else {
             if let code = snapshot.service.lastExitCode, code != 0 {
                 return .error("本地运行组件退出，代码 \(code)。请打开诊断查看原因。")
@@ -82,7 +83,7 @@ final class AppModel: ObservableObject {
         case "finalizing": return .recognizing
         case "ready": return .ready
         case "starting": return .starting
-        case "stopping", "stopped": return .paused
+        case "stopping", "stopped": return .error("本地运行组件已停止。请重试。")
         default: return .starting
         }
     }
@@ -180,16 +181,6 @@ final class AppModel: ObservableObject {
         await perform("正在准备 Voice Input") {
             try await self.bridge.installService()
             try await self.bridge.startService()
-        }
-    }
-
-    func toggleService() {
-        Task {
-            if snapshot?.service.loaded == true {
-                await perform("正在暂停") { try await self.bridge.stopService() }
-            } else {
-                await ensureInstalledAndStarted()
-            }
         }
     }
 
@@ -351,8 +342,6 @@ final class AppModel: ObservableObject {
             } else {
                 showOnboarding()
             }
-        case .paused:
-            toggleService()
         case .starting, .ready, .listening, .recognizing:
             break
         }

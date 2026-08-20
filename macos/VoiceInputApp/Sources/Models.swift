@@ -171,7 +171,6 @@ struct LLMSettingsDraft: Equatable {
 
 enum AppRuntimeState: Equatable {
     case needsSetup(String)
-    case paused
     case starting
     case ready
     case listening
@@ -181,7 +180,6 @@ enum AppRuntimeState: Equatable {
     var title: String {
         switch self {
         case .needsSetup: "还需要一步"
-        case .paused: "已暂停"
         case .starting: "正在准备本地模型"
         case .ready: "本机输入法 · 就绪"
         case .listening: "正在听"
@@ -193,7 +191,6 @@ enum AppRuntimeState: Equatable {
     var detail: String {
         switch self {
         case .needsSetup(let reason): reason
-        case .paused: "恢复后即可按住当前快捷键说话"
         case .starting: "第一次加载可能需要十几秒"
         case .ready: "按住当前快捷键说话，松开后写入"
         case .listening: "松开当前快捷键后写入当前光标"

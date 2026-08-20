@@ -6,8 +6,7 @@ struct MenuBarLabel: View {
 
     var body: some View {
         StatusMark(
-            recording: model.runtimeState == .listening || model.runtimeState == .recognizing,
-            muted: model.runtimeState == .paused
+            recording: model.runtimeState == .listening || model.runtimeState == .recognizing
         )
         .accessibilityLabel("Voice Input，\(model.runtimeState.title)")
     }
@@ -16,6 +15,7 @@ struct MenuBarLabel: View {
 struct MenuBarPanel: View {
     @ObservedObject var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -100,18 +100,10 @@ struct MenuBarPanel: View {
             }
 
             VStack(spacing: 2) {
-                if showsPauseAction {
-                    Button(action: model.toggleService) {
-                        Label("暂停语音输入", systemImage: "pause.circle")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .disabled(model.isBusy)
-                }
-
-                SettingsLink {
+                Button {
+                    NSApp.activate(ignoringOtherApps: true)
+                    openSettings()
+                } label: {
                     Label("设置…", systemImage: "gearshape")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -152,14 +144,7 @@ struct MenuBarPanel: View {
 
     private var showsPrimaryAction: Bool {
         switch model.runtimeState {
-        case .needsSetup, .paused, .error: true
-        default: false
-        }
-    }
-
-    private var showsPauseAction: Bool {
-        switch model.runtimeState {
-        case .ready, .listening, .recognizing: true
+        case .needsSetup, .error: true
         default: false
         }
     }
@@ -167,7 +152,6 @@ struct MenuBarPanel: View {
     private var primaryActionTitle: String {
         switch model.runtimeState {
         case .needsSetup: "继续设置"
-        case .paused: "恢复语音输入"
         case .error: "重试"
         default: ""
         }
@@ -176,7 +160,6 @@ struct MenuBarPanel: View {
     private var primaryActionSymbol: String {
         switch model.runtimeState {
         case .needsSetup: "arrow.right.circle"
-        case .paused: "play.circle"
         case .error: "arrow.clockwise.circle"
         default: "circle"
         }
