@@ -47,6 +47,8 @@ final class PermissionPolicyTests: XCTestCase {
 
     func testReadyIgnoresOptionalInputMonitoring() {
         let snapshot = PermissionStatusSnapshot(
+            schemaVersion: 1,
+            subjectExecutable: "/tmp/voice-input",
             microphone: .authorized,
             accessibility: .authorized,
             inputMonitoring: .denied

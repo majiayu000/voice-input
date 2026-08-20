@@ -129,7 +129,8 @@ private struct PermissionSummary: View {
             ForEach(PermissionKind.allCases) { kind in
                 PermissionRow(
                     kind: kind,
-                    granted: granted(kind),
+                    state: model.permissions.state(for: kind),
+                    required: model.permissionRequirements.required.contains(kind),
                     request: { model.request(kind) },
                     openSettings: { model.openPermissionSettings(kind) }
                 )
@@ -138,13 +139,6 @@ private struct PermissionSummary: View {
         }
     }
 
-    private func granted(_ kind: PermissionKind) -> Bool {
-        switch kind {
-        case .microphone: model.permissions.microphone
-        case .accessibility: model.permissions.accessibility
-        case .inputMonitoring: model.permissions.inputMonitoring
-        }
-    }
 }
 
 private struct RecognitionSettings: View {
@@ -283,11 +277,18 @@ private struct DiagnosticsSettings: View {
                     Divider()
                     DiagnosticRow("模型", value: snapshot.models.first(where: \.active)?.fileName ?? "未选择")
                     Divider()
-                    DiagnosticRow("麦克风", value: model.permissions.microphone ? "已允许" : "未允许")
+                    DiagnosticRow("麦克风", value: model.permissions.microphone.statusText)
                     Divider()
-                    DiagnosticRow("辅助功能", value: model.permissions.accessibility ? "已允许" : "未允许")
+                    DiagnosticRow("辅助功能", value: model.permissions.accessibility.statusText)
                     Divider()
-                    DiagnosticRow("输入监控", value: model.permissions.inputMonitoring ? "已允许" : "未允许")
+                    DiagnosticRow("输入监控", value: model.permissions.inputMonitoring.statusText)
+                    Divider()
+                    DiagnosticRow(
+                        "权限主体",
+                        value: model.permissions.subjectExecutable.isEmpty
+                            ? "无法读取"
+                            : model.permissions.subjectExecutable
+                    )
                     Divider()
                     DiagnosticRow("配置", value: snapshot.settings.configPath)
                     Divider()

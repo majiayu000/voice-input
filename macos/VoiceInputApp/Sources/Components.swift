@@ -121,7 +121,8 @@ struct LoadingRows: View {
 
 struct PermissionRow: View {
     let kind: PermissionKind
-    let granted: Bool
+    let state: SystemPermissionState
+    let required: Bool
     let request: () -> Void
     let openSettings: () -> Void
 
@@ -130,21 +131,26 @@ struct PermissionRow: View {
             Image(systemName: kind.symbol)
                 .font(.system(size: 16))
                 .frame(width: 24)
-                .foregroundStyle(granted ? .green : .secondary)
+                .foregroundStyle(state.isAuthorized ? .green : .secondary)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind.title).font(.system(size: 13, weight: .medium))
-                Text(kind.explanation)
+                Text(required ? kind.explanation : "\(kind.explanation) 当前快捷键不需要此权限。")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
-            if granted {
+            if state.isAuthorized {
                 Label("已允许", systemImage: "checkmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(.green)
             } else {
-                Button("允许", action: request)
+                Text(state.statusText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                if state.canRequest {
+                    Button("允许", action: request)
+                }
                 Button("打开设置", action: openSettings)
             }
         }

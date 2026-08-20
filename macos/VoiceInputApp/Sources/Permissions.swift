@@ -1,7 +1,4 @@
 import AppKit
-import ApplicationServices
-import AVFoundation
-import CoreGraphics
 
 enum SystemPermissionState: String, Codable, Equatable {
     case notDetermined = "not_determined"
@@ -12,12 +9,32 @@ enum SystemPermissionState: String, Codable, Equatable {
 
     var canRequest: Bool { self == .notDetermined }
     var isAuthorized: Bool { self == .authorized }
+
+    var statusText: String {
+        switch self {
+        case .notDetermined: "尚未请求"
+        case .denied: "未允许"
+        case .restricted: "受系统限制"
+        case .authorized: "已允许"
+        case .unknown: "无法读取"
+        }
+    }
 }
 
 struct PermissionStatusSnapshot: Codable, Equatable {
+    let schemaVersion: Int
+    let subjectExecutable: String
     var microphone: SystemPermissionState
     var accessibility: SystemPermissionState
     var inputMonitoring: SystemPermissionState
+
+    static let unknown = PermissionStatusSnapshot(
+        schemaVersion: 1,
+        subjectExecutable: "",
+        microphone: .unknown,
+        accessibility: .unknown,
+        inputMonitoring: .unknown
+    )
 
     func state(for kind: PermissionKind) -> SystemPermissionState {
         switch kind {
@@ -29,6 +46,15 @@ struct PermissionStatusSnapshot: Codable, Equatable {
 
     func isReady(for requirements: PermissionRequirements) -> Bool {
         requirements.required.allSatisfy { state(for: $0).isAuthorized }
+    }
+
+    mutating func markDeniedIfUnchanged(_ kind: PermissionKind) {
+        guard state(for: kind) == .notDetermined else { return }
+        switch kind {
+        case .microphone: microphone = .denied
+        case .accessibility: accessibility = .denied
+        case .inputMonitoring: inputMonitoring = .denied
+        }
     }
 }
 
@@ -44,43 +70,8 @@ struct PermissionRequirements: Equatable {
     }
 }
 
-struct PermissionSnapshot: Equatable {
-    var microphone: Bool
-    var accessibility: Bool
-    var inputMonitoring: Bool
-
-    static let unknown = PermissionSnapshot(
-        microphone: false,
-        accessibility: false,
-        inputMonitoring: false
-    )
-
-    var ready: Bool { microphone && accessibility && inputMonitoring }
-}
-
 @MainActor
-final class PermissionService {
-    func snapshot() -> PermissionSnapshot {
-        PermissionSnapshot(
-            microphone: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
-            accessibility: AXIsProcessTrusted(),
-            inputMonitoring: CGPreflightListenEventAccess()
-        )
-    }
-
-    func requestMicrophone() async {
-        _ = await AVCaptureDevice.requestAccess(for: .audio)
-    }
-
-    func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
-    }
-
-    func requestInputMonitoring() {
-        _ = CGRequestListenEventAccess()
-    }
-
+final class PermissionSettingsService {
     func openSettings(_ permission: PermissionKind) {
         let anchor: String
         switch permission {

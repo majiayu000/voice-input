@@ -150,7 +150,8 @@ struct OnboardingView: View {
             ForEach(PermissionKind.allCases) { kind in
                 PermissionRow(
                     kind: kind,
-                    granted: granted(kind),
+                    state: model.permissions.state(for: kind),
+                    required: model.permissionRequirements.required.contains(kind),
                     request: { model.request(kind) },
                     openSettings: { model.openPermissionSettings(kind) }
                 )
@@ -234,26 +235,15 @@ struct OnboardingView: View {
 
     private var canContinue: Bool {
         switch step {
-        case .permissions: model.permissions.ready
+        case .permissions: model.permissionsReady
         case .model: model.snapshot?.models.contains(where: \.active) == true && !model.isBusy
         case .trial: model.runtimeState == .ready || model.activeRuntime?.sessionsCompleted ?? 0 > 0
         default: true
         }
     }
 
-    private func granted(_ kind: PermissionKind) -> Bool {
-        switch kind {
-        case .microphone: model.permissions.microphone
-        case .accessibility: model.permissions.accessibility
-        case .inputMonitoring: model.permissions.inputMonitoring
-        }
-    }
-
     private func move(_ offset: Int) {
         guard let next = OnboardingStep(rawValue: step.rawValue + offset) else { return }
-        if step == .privacy && offset > 0 {
-            model.apply(SettingsPatch(hotkey: "fn"), restart: false)
-        }
         if next == .trial {
             Task { await model.ensureInstalledAndStarted() }
         }

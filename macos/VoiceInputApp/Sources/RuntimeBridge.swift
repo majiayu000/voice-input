@@ -143,6 +143,7 @@ struct LLMProbe: Decodable, Equatable {
 enum RuntimeBridgeError: LocalizedError {
     case helperMissing(String)
     case commandFailed(String, String)
+    case permissionStatusUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -150,6 +151,8 @@ enum RuntimeBridgeError: LocalizedError {
             "找不到 Voice Input 本地运行组件：\(path)"
         case .commandFailed(_, let message):
             message
+        case .permissionStatusUnavailable(let message):
+            "无法读取运行组件的权限状态：\(message)"
         }
     }
 }

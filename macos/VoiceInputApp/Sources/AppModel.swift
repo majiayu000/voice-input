@@ -7,7 +7,7 @@ final class AppModel: ObservableObject {
     static let shared = AppModel()
 
     @Published private(set) var snapshot: ControlSnapshot?
-    @Published private(set) var permissions = PermissionSnapshot.unknown
+    @Published private(set) var permissions = PermissionStatusSnapshot.unknown
     @Published private(set) var isBusy = false
     @Published private(set) var busyLabel: String?
     @Published var errorMessage: String?
@@ -18,24 +18,34 @@ final class AppModel: ObservableObject {
     @Published private(set) var modelProgress: Double?
 
     private let bridge = RuntimeBridge.shared
-    private let permissionService = PermissionService()
+    private let permissionSettings = PermissionSettingsService()
     private var pollTask: Task<Void, Never>?
+    private var attemptedPermissions = Set<PermissionKind>()
     private var started = false
     private var lastSessionsCompleted: UInt64 = 0
     private var toastTask: Task<Void, Never>?
+
+    var permissionRequirements: PermissionRequirements {
+        PermissionRequirements(hotkey: snapshot?.settings.hotkey ?? "control+shift+space")
+    }
+
+    var permissionsReady: Bool {
+        permissions.isReady(for: permissionRequirements)
+    }
 
     var runtimeState: AppRuntimeState {
         guard let snapshot else { return .starting }
         if !snapshot.models.contains(where: \.active) {
             return .needsSetup("请选择并准备一个本地识别模型")
         }
-        if !permissions.microphone {
+        if permissions.microphone != .authorized {
             return .needsSetup("需要麦克风权限才能接收语音")
         }
-        if !permissions.accessibility {
+        if permissions.accessibility != .authorized {
             return .needsSetup("需要辅助功能权限才能写入文字")
         }
-        if !permissions.inputMonitoring {
+        if permissionRequirements.required.contains(.inputMonitoring),
+           permissions.inputMonitoring != .authorized {
             return .needsSetup("需要输入监控权限才能监听 Fn")
         }
         guard snapshot.service.installed else {
@@ -91,9 +101,26 @@ final class AppModel: ObservableObject {
     }
 
     func refresh(silent: Bool = false) async {
-        permissions = permissionService.snapshot()
         do {
             let next = try await bridge.snapshot()
+            if next.service.installed {
+                do {
+                    var permissionSnapshot = try await bridge.permissionSnapshot(
+                        helperPath: next.service.paths.binary
+                    )
+                    for permission in attemptedPermissions {
+                        permissionSnapshot.markDeniedIfUnchanged(permission)
+                    }
+                    permissions = permissionSnapshot
+                } catch {
+                    permissions = .unknown
+                    throw RuntimeBridgeError.permissionStatusUnavailable(
+                        error.localizedDescription
+                    )
+                }
+            } else {
+                permissions = .unknown
+            }
             let sessions = (next.service.runtime ?? next.recentRuntime)?.sessionsCompleted ?? 0
             let completedNow = snapshot != nil && sessions > lastSessionsCompleted
             lastSessionsCompleted = sessions
@@ -164,21 +191,22 @@ final class AppModel: ObservableObject {
 
     func request(_ permission: PermissionKind) {
         Task {
-            switch permission {
-            case .microphone:
-                await permissionService.requestMicrophone()
-            case .accessibility:
-                permissionService.requestAccessibility()
-            case .inputMonitoring:
-                permissionService.requestInputMonitoring()
+            await perform("正在请求\(permission.title)权限") {
+                try await self.bridge.installService()
+                let helperPath = try await self.bridge.snapshot().service.paths.binary
+                self.attemptedPermissions.insert(permission)
+                var next = try await self.bridge.requestPermission(
+                    permission,
+                    helperPath: helperPath
+                )
+                next.markDeniedIfUnchanged(permission)
+                self.permissions = next
             }
-            try? await Task.sleep(for: .milliseconds(500))
-            permissions = permissionService.snapshot()
         }
     }
 
     func openPermissionSettings(_ permission: PermissionKind) {
-        permissionService.openSettings(permission)
+        permissionSettings.openSettings(permission)
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -234,9 +262,10 @@ final class AppModel: ObservableObject {
                 let permissionText = """
 
                 permissions:
-                  microphone: \(permissions.microphone)
-                  accessibility: \(permissions.accessibility)
-                  input_monitoring: \(permissions.inputMonitoring)
+                  subject: \(permissions.subjectExecutable)
+                  microphone: \(permissions.microphone.rawValue)
+                  accessibility: \(permissions.accessibility.rawValue)
+                  input_monitoring: \(permissions.inputMonitoring.rawValue)
                 """
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(raw + permissionText, forType: .string)
@@ -264,7 +293,7 @@ final class AppModel: ObservableObject {
         case .needsSetup:
             showOnboarding()
         case .error:
-            if permissions.ready {
+            if permissionsReady {
                 Task {
                     await perform("正在重新启动") {
                         if self.snapshot?.service.installed != true {
