@@ -740,9 +740,7 @@ fn install_function_hotkey() -> anyhow::Result<(MacHotkeyGuard, mpsc::Receiver<H
         },
     )
     .map_err(|_| {
-        anyhow::anyhow!(
-            "failed to create the Fn event tap; grant Accessibility and Input Monitoring permission"
-        )
+        anyhow::anyhow!("failed to create the Fn event tap; grant Accessibility permission")
     })?;
     let source = tap
         .mach_port

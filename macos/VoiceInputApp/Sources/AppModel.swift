@@ -7,7 +7,9 @@ final class AppModel: ObservableObject {
     static let shared = AppModel()
 
     @Published private(set) var snapshot: ControlSnapshot?
+    @Published private(set) var liveRuntime: RuntimeSnapshot?
     @Published private(set) var permissions = PermissionStatusSnapshot.unknown
+    @Published private(set) var statusReadError: String?
     @Published private(set) var isBusy = false
     @Published private(set) var busyLabel: String?
     @Published var errorMessage: String?
@@ -23,7 +25,9 @@ final class AppModel: ObservableObject {
     private var attemptedPermissions = Set<PermissionKind>()
     private var started = false
     private var lastSessionsCompleted: UInt64 = 0
+    private var lastRuntimePID: UInt32?
     private var toastTask: Task<Void, Never>?
+    private var refreshInProgress = false
 
     var permissionRequirements: PermissionRequirements {
         PermissionRequirements(hotkey: snapshot?.settings.hotkey ?? "control+shift+space")
@@ -33,7 +37,23 @@ final class AppModel: ObservableObject {
         permissions.isReady(for: permissionRequirements)
     }
 
+    var hotkeyDisplayName: String {
+        snapshot?.settings.hotkey == "fn" ? "Fn" : "Control + Shift + Space"
+    }
+
+    var runtimeDetail: String {
+        switch runtimeState {
+        case .paused: "恢复后即可按住 \(hotkeyDisplayName) 说话"
+        case .ready: "按住 \(hotkeyDisplayName) 说话，松开后写入"
+        case .listening: "松开 \(hotkeyDisplayName) 后写入当前光标"
+        default: runtimeState.detail
+        }
+    }
+
     var runtimeState: AppRuntimeState {
+        if let statusReadError {
+            return .error(statusReadError)
+        }
         guard let snapshot else { return .starting }
         if !snapshot.models.contains(where: \.active) {
             return .needsSetup("请选择并准备一个本地识别模型")
@@ -44,15 +64,11 @@ final class AppModel: ObservableObject {
         if permissions.accessibility != .authorized {
             return .needsSetup("需要辅助功能权限才能写入文字")
         }
-        if permissionRequirements.required.contains(.inputMonitoring),
-           permissions.inputMonitoring != .authorized {
-            return .needsSetup("需要输入监控权限才能监听 Fn")
-        }
         guard snapshot.service.installed else {
             return .needsSetup("本地运行组件尚未安装")
         }
         guard snapshot.service.loaded else { return .paused }
-        guard let runtime = snapshot.service.runtime ?? snapshot.recentRuntime else {
+        guard let runtime = liveRuntime else {
             if let code = snapshot.service.lastExitCode, code != 0 {
                 return .error("本地运行组件退出，代码 \(code)。请打开诊断查看原因。")
             }
@@ -72,7 +88,7 @@ final class AppModel: ObservableObject {
     }
 
     var activeRuntime: RuntimeSnapshot? {
-        snapshot?.service.runtime ?? snapshot?.recentRuntime
+        liveRuntime ?? snapshot?.recentRuntime
     }
 
     var onboardingComplete: Bool {
@@ -93,46 +109,70 @@ final class AppModel: ObservableObject {
             }
         }
         pollTask = Task { [weak self] in
+            var tick = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                await self?.refresh(silent: true)
+                try? await Task.sleep(for: .milliseconds(125))
+                guard !Task.isCancelled, let self else { return }
+                tick += 1
+                if !self.isBusy {
+                    await self.refreshLiveRuntime()
+                    if tick.isMultiple(of: 40) {
+                        await self.refresh(silent: true)
+                    }
+                }
             }
         }
     }
 
     func refresh(silent: Bool = false) async {
+        if refreshInProgress {
+            guard !silent else { return }
+            while refreshInProgress, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+            guard !Task.isCancelled else { return }
+        }
+        refreshInProgress = true
+        defer { refreshInProgress = false }
         do {
             let next = try await bridge.snapshot()
+            var permissionError: String?
             if next.service.installed {
                 do {
-                    var permissionSnapshot = try await bridge.permissionSnapshot(
-                        helperPath: next.service.paths.binary
-                    )
-                    for permission in attemptedPermissions {
-                        permissionSnapshot.markDeniedIfUnchanged(permission)
-                    }
-                    permissions = permissionSnapshot
+                    permissions = try await readPermissions(helperPath: next.service.paths.binary)
                 } catch {
                     permissions = .unknown
-                    throw RuntimeBridgeError.permissionStatusUnavailable(
+                    permissionError = RuntimeBridgeError.permissionStatusUnavailable(
                         error.localizedDescription
-                    )
+                    ).localizedDescription
                 }
             } else {
                 permissions = .unknown
             }
-            let sessions = (next.service.runtime ?? next.recentRuntime)?.sessionsCompleted ?? 0
-            let completedNow = snapshot != nil && sessions > lastSessionsCompleted
-            lastSessionsCompleted = sessions
             snapshot = next
-            CandidateOverlayController.shared.update(
-                runtime: next.service.runtime ?? next.recentRuntime,
-                completedNow: completedNow
-            )
-            if completedNow { showToast("文字已写入") }
-            if !silent { errorMessage = nil }
+            updateLiveRuntime(next.service.runtime)
+            statusReadError = permissionError
+            if !silent {
+                errorMessage = permissionError
+            }
         } catch {
-            if !silent { errorMessage = friendlyError(error.localizedDescription) }
+            permissions = .unknown
+            let message = friendlyError(error.localizedDescription)
+            statusReadError = message
+            if !silent { errorMessage = message }
+        }
+    }
+
+    private func refreshLiveRuntime() async {
+        guard let snapshot, snapshot.service.loaded else {
+            updateLiveRuntime(nil)
+            return
+        }
+        do {
+            let runtime = try await bridge.runtimeSnapshot(at: snapshot.service.paths.runtimeStatus)
+            updateLiveRuntime(runtime?.pid == snapshot.service.pid ? runtime : nil)
+        } catch {
+            // The slower control snapshot reports persistent status-file failures.
         }
     }
 
@@ -195,8 +235,13 @@ final class AppModel: ObservableObject {
                     permission,
                     helperPath: helperPath
                 )
+                self.recordPermissionAttempt(permission, for: next)
                 next.markDeniedIfUnchanged(permission)
                 self.permissions = next
+                if !next.state(for: permission).isAuthorized {
+                    self.permissionSettings.openSettings(permission)
+                    self.showToast("请在系统设置中允许 Voice Input Runtime")
+                }
             }
         }
     }
@@ -254,7 +299,7 @@ final class AppModel: ObservableObject {
     func copyDiagnostics() {
         Task {
             do {
-                let raw = try await bridge.rawSnapshot()
+                let raw = try await bridge.diagnosticSnapshot()
                 let permissionText = """
 
                 permissions:
@@ -274,7 +319,12 @@ final class AppModel: ObservableObject {
 
     func openLogs() {
         guard let path = snapshot?.service.paths.stderrLog else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        let log = URL(fileURLWithPath: path)
+        if FileManager.default.fileExists(atPath: log.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([log])
+        } else {
+            NSWorkspace.shared.open(log.deletingLastPathComponent())
+        }
     }
 
     func copyRecentText() {
@@ -319,9 +369,7 @@ final class AppModel: ObservableObject {
 
     func quit() {
         Task {
-            if snapshot?.service.loaded == true {
-                try? await bridge.stopService()
-            }
+            if snapshot?.service.loaded == true { try? await bridge.stopService() }
             NSApplication.shared.terminate(nil)
         }
     }
@@ -349,6 +397,68 @@ final class AppModel: ObservableObject {
 
     private func refreshLoginItemState() {
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    private func readPermissions(helperPath: String) async throws -> PermissionStatusSnapshot {
+        var permissionSnapshot = try await bridge.permissionSnapshot(helperPath: helperPath)
+        for permission in PermissionKind.allCases
+        where permissionWasAttempted(permission, for: permissionSnapshot) {
+            permissionSnapshot.markDeniedIfUnchanged(permission)
+        }
+        return permissionSnapshot
+    }
+
+    private func updateLiveRuntime(_ runtime: RuntimeSnapshot?) {
+        let completedNow: Bool
+        if let runtime {
+            completedNow = lastRuntimePID == runtime.pid
+                && runtime.sessionsCompleted > lastSessionsCompleted
+            lastRuntimePID = runtime.pid
+            lastSessionsCompleted = runtime.sessionsCompleted
+        } else {
+            completedNow = false
+            lastRuntimePID = nil
+            lastSessionsCompleted = 0
+        }
+        liveRuntime = runtime
+        CandidateOverlayController.shared.update(runtime: runtime, completedNow: completedNow)
+        if completedNow { showToast("文字已写入") }
+    }
+
+    private func recordPermissionAttempt(
+        _ permission: PermissionKind,
+        for snapshot: PermissionStatusSnapshot
+    ) {
+        attemptedPermissions.insert(permission)
+        guard let identity = permissionSubjectIdentity(snapshot) else { return }
+        UserDefaults.standard.set(identity, forKey: "permissionAttempt.\(permission.rawValue)")
+    }
+
+    private func permissionWasAttempted(
+        _ permission: PermissionKind,
+        for snapshot: PermissionStatusSnapshot
+    ) -> Bool {
+        if attemptedPermissions.contains(permission) {
+            return true
+        }
+        guard let identity = permissionSubjectIdentity(snapshot) else { return false }
+        return UserDefaults.standard.string(
+            forKey: "permissionAttempt.\(permission.rawValue)"
+        ) == identity
+    }
+
+    private func permissionSubjectIdentity(
+        _ snapshot: PermissionStatusSnapshot
+    ) -> String? {
+        guard !snapshot.subjectExecutable.isEmpty,
+              let attributes = try? FileManager.default.attributesOfItem(
+                  atPath: snapshot.subjectExecutable
+              ),
+              let size = attributes[.size] as? NSNumber,
+              let modified = attributes[.modificationDate] as? Date else {
+            return nil
+        }
+        return "launchd-v1|\(snapshot.subjectExecutable)|\(size)|\(modified.timeIntervalSince1970)"
     }
 
     private func pollModelProgress(_ model: ModelSnapshot) async {
@@ -385,8 +495,8 @@ private func presetName(_ preset: String) -> String {
 
 private func friendlyError(_ message: String) -> String {
     let lower = message.lowercased()
-    if lower.contains("accessibility") || lower.contains("event tap") {
-        return "辅助功能或输入监控尚未允许。授权后请重新启动 Voice Input。"
+    if lower.contains("accessibility") || lower.contains("input monitoring") || lower.contains("event tap") {
+        return "辅助功能尚未允许。授权 Voice Input Runtime 后请重新启动 Voice Input。"
     }
     if lower.contains("microphone") || lower.contains("audio") {
         return "无法使用麦克风。请检查麦克风权限和当前输入设备。"
@@ -396,6 +506,15 @@ private func friendlyError(_ message: String) -> String {
     }
     if lower.contains("launchctl") {
         return "本地运行组件没有启动。请重试；如果仍失败，请打开诊断。"
+    }
+    if lower.contains("timed out") || lower.contains("timeout") {
+        return "操作等待超时。请检查网络或本地服务后重试。"
+    }
+    if lower.contains("sha-256") || lower.contains("checksum") {
+        return "模型校验失败，未启用损坏文件。请重新下载。"
+    }
+    if lower.contains("connection") || lower.contains("network") || lower.contains("dns") {
+        return "无法连接到服务。请检查地址、网络和服务是否正在运行。"
     }
     return message
 }

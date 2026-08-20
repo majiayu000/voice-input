@@ -3,6 +3,8 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 pub const SERVICE_LABEL: &str = "com.lifcc.voiceinput";
+pub const RUNTIME_APP_BUNDLE_NAME: &str = "Voice Input Runtime.app";
+pub const LEGACY_RUNTIME_APP_BUNDLE_NAME: &str = "Voice Input.app";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ServicePaths {
@@ -25,7 +27,7 @@ impl ServicePaths {
             .unwrap_or_else(|| home.join("Library/Application Support"))
             .join("voice-input");
         let logs = home.join("Library/Logs/voice-input");
-        let app_bundle = data_dir.join("Voice Input.app");
+        let app_bundle = data_dir.join(RUNTIME_APP_BUNDLE_NAME);
         Ok(Self {
             binary: app_bundle.join("Contents/MacOS/voice-input"),
             app_bundle,
@@ -47,7 +49,7 @@ impl ServicePaths {
     #[cfg(test)]
     pub(crate) fn in_root(root: &Path) -> Self {
         let data_dir = root.join("data");
-        let app_bundle = data_dir.join("Voice Input.app");
+        let app_bundle = data_dir.join(RUNTIME_APP_BUNDLE_NAME);
         Self {
             binary: app_bundle.join("Contents/MacOS/voice-input"),
             app_bundle,

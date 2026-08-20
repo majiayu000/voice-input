@@ -29,18 +29,15 @@ final class PermissionPolicyTests: XCTestCase {
         XCTAssertEqual(requirements.required, [.microphone, .accessibility])
     }
 
-    func testFunctionHotkeyRequiresInputMonitoring() {
+    func testFunctionHotkeyUsesAccessibilityForEventListening() {
         let requirements = PermissionRequirements(hotkey: "fn")
 
-        XCTAssertEqual(
-            requirements.required,
-            [.microphone, .accessibility, .inputMonitoring]
-        )
+        XCTAssertEqual(requirements.required, [.microphone, .accessibility])
     }
 
-    func testOnlyNotDeterminedPermissionCanRequestAgain() {
+    func testUnresolvedPermissionCanRequestAgain() {
         XCTAssertTrue(SystemPermissionState.notDetermined.canRequest)
-        XCTAssertFalse(SystemPermissionState.denied.canRequest)
+        XCTAssertTrue(SystemPermissionState.denied.canRequest)
         XCTAssertFalse(SystemPermissionState.restricted.canRequest)
         XCTAssertFalse(SystemPermissionState.authorized.canRequest)
     }
@@ -57,6 +54,6 @@ final class PermissionPolicyTests: XCTestCase {
         XCTAssertTrue(
             snapshot.isReady(for: PermissionRequirements(hotkey: "control+shift+space"))
         )
-        XCTAssertFalse(snapshot.isReady(for: PermissionRequirements(hotkey: "fn")))
+        XCTAssertTrue(snapshot.isReady(for: PermissionRequirements(hotkey: "fn")))
     }
 }

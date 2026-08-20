@@ -204,7 +204,7 @@ The status mark is a 22-by-16-pixel square carrying “听”. It changes from n
 - **Do** use a square “听” menu-bar mark and a compact cursor-adjacent candidate strip.
 - **Do** distinguish process running, service ready, listening, recognizing, completed, blocked, and error states with text.
 - **Do** use native macOS controls, keyboard focus, accessibility labels, semantic color, and system appearance.
-- **Do** explain microphone, Accessibility, and Input Monitoring permissions in ordinary language and provide the exact next action.
+- **Do** explain microphone and Accessibility permissions in ordinary language and provide the exact next action. Accessibility covers both text insertion and the Fn event tap.
 - **Do** keep local processing visible: default to no saved audio and no LLM, with remote features opt-in.
 
 ### Don't:

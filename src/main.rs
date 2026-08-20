@@ -128,6 +128,12 @@ enum PermissionCommand {
     Request {
         #[arg(value_enum)]
         permission: PermissionArgument,
+        /// Write a marker immediately before asking macOS for permission.
+        #[arg(long, hide = true)]
+        ready_file: Option<PathBuf>,
+        /// Keep a LaunchServices-started permission broker alive while the user responds.
+        #[arg(long, default_value_t = 0, hide = true)]
+        hold_seconds: u64,
     },
 }
 
@@ -267,6 +273,8 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Inject { text, stdout } => {
             let config = load_config(config_path.as_deref())?;
+            let permissions = system_permission_snapshot()?;
+            voice_input::validate_runtime_permissions(&permissions, &config.hotkey, !stdout)?;
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
@@ -371,6 +379,8 @@ fn main() -> anyhow::Result<()> {
                 "seconds must be positive"
             );
             let config = load_config(config_path.as_deref())?;
+            let permissions = system_permission_snapshot()?;
+            voice_input::validate_runtime_permissions(&permissions, &config.hotkey, !stdout)?;
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
@@ -437,7 +447,26 @@ fn main() -> anyhow::Result<()> {
         Command::Permission { command } => {
             let snapshot = match command {
                 PermissionCommand::Snapshot => system_permission_snapshot()?,
-                PermissionCommand::Request { permission } => request_permission(permission.into())?,
+                PermissionCommand::Request {
+                    permission,
+                    ready_file,
+                    hold_seconds,
+                } => {
+                    if let Some(path) = ready_file {
+                        std::fs::write(&path, b"ready").with_context(|| {
+                            format!(
+                                "failed to write permission broker marker {}",
+                                path.display()
+                            )
+                        })?;
+                    }
+                    let snapshot = request_permission(permission.into())?;
+                    println!("{}", serde_json::to_string_pretty(&snapshot)?);
+                    if hold_seconds > 0 {
+                        std::thread::sleep(Duration::from_secs(hold_seconds));
+                    }
+                    return Ok(());
+                }
             };
             println!("{}", serde_json::to_string_pretty(&snapshot)?);
         }
@@ -577,11 +606,8 @@ fn run_daemon(
     mock_text: String,
     stdout: bool,
 ) -> anyhow::Result<()> {
-    if !stdout && !accessibility_is_trusted(true) {
-        tracing::warn!(
-            "Accessibility permission is not active; text insertion will fail until it is granted"
-        );
-    }
+    let permissions = system_permission_snapshot()?;
+    voice_input::validate_runtime_permissions(&permissions, &config.hotkey, !stdout)?;
 
     let paths = ServicePaths::discover(config_path)?;
     let _instance_lease = InstanceLease::acquire(&paths.instance_lock)?;

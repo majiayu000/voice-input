@@ -13,12 +13,13 @@ models or direct TOML mutation:
 
 ```text
 SwiftUI App
-  ├── RuntimeBridge (Process + Codable)
-  ├── PermissionService (macOS frameworks)
+  ├── RuntimeBridge (Process control + direct atomic status reads)
+  ├── PermissionSettingsService (System Settings links only)
   ├── CandidateOverlayController (read-only AX cursor location)
   └── AppModel (presentation state)
            │
            ▼
+installed voice-input permission snapshot / request
 voice-input control snapshot / apply / test-refiner
            │
            ▼
@@ -36,6 +37,13 @@ LaunchAgent is installed with `RunAtLoad=false` and `KeepAlive=false`; it starts
 only when the menu-bar application explicitly bootstraps and kickstarts it.
 This prevents the settings toggle from claiming the service is disabled while
 launchd silently starts it anyway.
+
+Interactive phase feedback does not spawn the control CLI. `AppModel` reads the
+atomically replaced runtime JSON every 125 ms and accepts it only when its PID
+matches launchd's current process. A five-second control refresh reconciles
+service, model, configuration, and runtime-helper permission state. Historical
+runtime data can populate “recent text” and latency, but never drives a live
+candidate overlay or ready/error state.
 
 ## Objective
 
@@ -167,9 +175,11 @@ lands or their independent release/build cost becomes material.
 
 - Failure to acquire the instance lease or initialize audio/hotkeys is fatal at
   startup and visible through service status/logs.
-- The installed helper lives inside a signed app container with a stable bundle
-  identifier and microphone usage string. Accessibility and microphone consent
-  remain explicit user decisions; installation never mutates macOS TCC data.
+- The installed helper lives inside a signed app container with the dedicated
+  `com.lifcc.voiceinput.runtime` bundle identifier, Audio Input entitlement, and
+  microphone usage string. The GUI reads and requests permissions through that
+  exact executable. Accessibility and microphone consent remain explicit user
+  decisions; installation never mutates macOS TCC data.
   Development installs are ad-hoc signed, while release installs can supply a
   persistent signing identity so the designated requirement survives updates.
 - A single dictation failure is recoverable: capture stops, the engine resets,
@@ -188,6 +198,9 @@ lands or their independent release/build cost becomes material.
   both present. The default Refiner is local identity.
 - Status, feedback, and latency persistence use latest-value or bounded worker
   queues; none performs filesystem or AppKit work on the audio callback.
+- Support exports redact `last_text` and defensive credential fields before
+  copying diagnostics; configuration exposes only an environment variable name,
+  never its value.
 - Shutdown stops capture, drains no new user work, cancels the active ASR
   session, publishes `stopped`, and releases the instance lease.
 

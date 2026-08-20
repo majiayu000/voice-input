@@ -19,7 +19,7 @@ struct MenuBarPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StatusHeader(state: model.runtimeState)
+            StatusHeader(state: model.runtimeState, detail: model.runtimeDetail)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
 

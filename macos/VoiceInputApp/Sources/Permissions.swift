@@ -7,7 +7,7 @@ enum SystemPermissionState: String, Codable, Equatable {
     case authorized
     case unknown
 
-    var canRequest: Bool { self == .notDetermined }
+    var canRequest: Bool { self == .notDetermined || self == .denied }
     var isAuthorized: Bool { self == .authorized }
 
     var statusText: String {
@@ -61,12 +61,8 @@ struct PermissionStatusSnapshot: Codable, Equatable {
 struct PermissionRequirements: Equatable {
     let required: [PermissionKind]
 
-    init(hotkey: String) {
-        var required: [PermissionKind] = [.microphone, .accessibility]
-        if hotkey == "fn" {
-            required.append(.inputMonitoring)
-        }
-        self.required = required
+    init(hotkey _: String) {
+        required = PermissionKind.setupCases
     }
 }
 
@@ -93,6 +89,8 @@ enum PermissionKind: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    static let setupCases: [PermissionKind] = [.microphone, .accessibility]
+
     var cliArgument: String {
         switch self {
         case .microphone: "microphone"
@@ -111,9 +109,9 @@ enum PermissionKind: String, CaseIterable, Identifiable {
 
     var explanation: String {
         switch self {
-        case .microphone: "接收你说的话；音频默认不保存。"
-        case .accessibility: "把识别结果写入当前输入框。"
-        case .inputMonitoring: "在其他应用中识别 Fn 的按下和松开。"
+        case .microphone: "允许 Voice Input Runtime 接收你说的话；音频默认不保存。"
+        case .accessibility: "允许 Voice Input Runtime 把识别结果写入当前输入框。"
+        case .inputMonitoring: "允许 Voice Input Runtime 在其他应用中识别 Fn 的按下和松开。"
         }
     }
 

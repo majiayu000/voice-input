@@ -28,6 +28,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 struct SettingsRootView: View {
     @ObservedObject var model: AppModel
     @State private var selection: SettingsSection? = .general
+    @StateObject private var llmEditor = LLMSettingsEditor()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -42,11 +43,10 @@ struct SettingsRootView: View {
                     switch selection ?? .general {
                     case .general: GeneralSettings(model: model)
                     case .recognition: RecognitionSettings(model: model)
-                    case .text: TextSettings(model: model)
+                    case .text: TextSettings(model: model, editor: llmEditor)
                     case .diagnostics: DiagnosticsSettings(model: model)
                     }
                 }
-                .id(selection)
                 .transition(.opacity)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -57,7 +57,13 @@ struct SettingsRootView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 500)
-        .task { await model.refresh() }
+        .task {
+            await model.refresh()
+            llmEditor.sync(from: model.snapshot?.settings)
+        }
+        .onChange(of: model.snapshot?.settings) { _, settings in
+            llmEditor.sync(from: settings)
+        }
         .animation(reduceMotion ? nil : VoiceInputDesign.stateAnimation, value: selection)
         .animation(reduceMotion ? nil : VoiceInputDesign.stateAnimation, value: model.toastMessage)
     }
@@ -84,7 +90,7 @@ private struct GeneralSettings: View {
 
     var body: some View {
         SettingsPage(title: "常规") {
-            StatusHeader(state: model.runtimeState)
+            StatusHeader(state: model.runtimeState, detail: model.runtimeDetail)
             Form {
                 Toggle("启用 Voice Input", isOn: Binding(
                     get: { model.snapshot?.service.loaded == true },
@@ -115,7 +121,9 @@ private struct GeneralSettings: View {
                 }
             }
             .formStyle(.grouped)
+            .disabled(model.isBusy)
             PermissionSummary(model: model)
+                .disabled(model.isBusy)
         }
     }
 }
@@ -126,7 +134,7 @@ private struct PermissionSummary: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("系统权限").font(.system(size: 13, weight: .semibold)).padding(.bottom, 4)
-            ForEach(PermissionKind.allCases) { kind in
+            ForEach(PermissionKind.setupCases) { kind in
                 PermissionRow(
                     kind: kind,
                     state: model.permissions.state(for: kind),
@@ -134,7 +142,7 @@ private struct PermissionSummary: View {
                     request: { model.request(kind) },
                     openSettings: { model.openPermissionSettings(kind) }
                 )
-                if kind != .inputMonitoring { Divider() }
+                if kind != PermissionKind.setupCases.last { Divider() }
             }
         }
     }
@@ -178,51 +186,84 @@ private struct RecognitionSettings: View {
                 ))
             }
             .formStyle(.grouped)
+            .disabled(model.isBusy)
         }
+    }
+}
+
+@MainActor
+private final class LLMSettingsEditor: ObservableObject {
+    @Published var draft = LLMSettingsDraft()
+    private(set) var baseline: LLMSettingsDraft?
+    private var submitted: LLMSettingsDraft?
+
+    var hasUnsavedChanges: Bool {
+        baseline.map { draft != $0 } ?? false
+    }
+
+    func sync(from settings: ControlSettings?) {
+        guard let settings else { return }
+        let next = LLMSettingsDraft(settings: settings)
+        if baseline == nil || draft == baseline || submitted == next {
+            draft = next
+            baseline = next
+            submitted = nil
+        }
+    }
+
+    func markSubmitted() {
+        submitted = draft
     }
 }
 
 private struct TextSettings: View {
     @ObservedObject var model: AppModel
-    @State private var enabled = false
-    @State private var endpoint = "http://127.0.0.1:11434/v1"
-    @State private var llmModel = ""
-    @State private var keyEnvironment = ""
-    @State private var allowRemote = false
-    @State private var prompt = ""
+    @ObservedObject var editor: LLMSettingsEditor
 
     var body: some View {
         SettingsPage(title: "文本处理") {
-            Toggle("使用 OpenAI 兼容服务润色文字", isOn: $enabled)
+            Toggle("使用 OpenAI 兼容服务润色文字", isOn: $editor.draft.enabled)
                 .toggleStyle(.switch)
-            Text(enabled ? "识别文字会发送到下方服务。使用本机地址时，文字不会离开这台 Mac。" : "当前使用原始识别结果，不产生 LLM 网络请求。")
+            Text(editor.draft.enabled ? "识别文字会发送到下方服务。使用本机地址时，文字不会离开这台 Mac。" : "当前使用原始识别结果，不产生 LLM 网络请求。")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             Form {
-                TextField("服务地址", text: $endpoint)
-                    .disabled(!enabled)
-                TextField("模型名称", text: $llmModel)
-                    .disabled(!enabled)
-                TextField("API Key 环境变量名称", text: $keyEnvironment)
-                    .disabled(!enabled)
-                Toggle("允许 HTTPS 远程地址", isOn: $allowRemote)
-                    .disabled(!enabled)
-                TextField("润色规则", text: $prompt, axis: .vertical)
+                TextField("服务地址", text: $editor.draft.endpoint)
+                    .disabled(!editor.draft.enabled)
+                TextField("模型名称", text: $editor.draft.model)
+                    .disabled(!editor.draft.enabled)
+                TextField("API Key 环境变量名称", text: $editor.draft.keyEnvironment)
+                    .disabled(!editor.draft.enabled)
+                Toggle("允许 HTTPS 远程地址", isOn: $editor.draft.allowRemote)
+                    .disabled(!editor.draft.enabled)
+                TextField("润色规则", text: $editor.draft.prompt, axis: .vertical)
                     .lineLimit(3...6)
-                    .disabled(!enabled)
+                    .disabled(!editor.draft.enabled)
             }
             .formStyle(.grouped)
-            if allowRemote && enabled {
+            .disabled(model.isBusy)
+            Text("本机无密钥服务可以留空。API Key 仅填写环境变量名称；Voice Input 不保存密钥值，LaunchAgent 环境需要由高级用户配置。")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            if editor.draft.isRemoteEndpoint && editor.draft.enabled {
                 Label("远程服务会收到语音识别后的文字。请确认你信任这个服务。", systemImage: "exclamationmark.triangle")
                     .font(.system(size: 12))
                     .foregroundStyle(.orange)
             }
+            if let validation = editor.draft.validationMessage {
+                InlineError(message: validation)
+            }
+            if editor.hasUnsavedChanges {
+                Label("有尚未保存的文本设置", systemImage: "circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
             HStack {
                 Button("保存文本设置") { save() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(enabled && (endpoint.isEmpty || llmModel.isEmpty))
+                    .disabled(!editor.draft.isValid || model.isBusy)
                 Button("保存并测试连接") { saveAndTest() }
-                    .disabled(!enabled || model.isBusy)
+                    .disabled(!editor.draft.enabled || !editor.draft.isValid || model.isBusy)
                 if let probe = model.llmProbe {
                     Label("已连接 · \(probe.latencyMs) 毫秒", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(.green)
@@ -230,37 +271,16 @@ private struct TextSettings: View {
             }
             if let error = model.errorMessage { InlineError(message: error) }
         }
-        .onAppear(perform: load)
-        .onChange(of: model.snapshot) { load() }
-    }
-
-    private func load() {
-        guard let settings = model.snapshot?.settings else { return }
-        enabled = settings.refinerEnabled
-        endpoint = settings.refinerBaseUrl
-        llmModel = settings.refinerModel
-        keyEnvironment = settings.refinerApiKeyEnv ?? ""
-        allowRemote = settings.refinerAllowRemote
-        prompt = settings.refinerSystemPrompt
     }
 
     private func save() {
-        model.apply(currentPatch())
+        editor.markSubmitted()
+        model.apply(editor.draft.patch)
     }
 
     private func saveAndTest() {
-        model.saveAndTestLLM(currentPatch())
-    }
-
-    private func currentPatch() -> SettingsPatch {
-        SettingsPatch(
-            refinerEnabled: enabled,
-            refinerBaseUrl: endpoint,
-            refinerModel: llmModel,
-            refinerApiKeyEnv: keyEnvironment,
-            refinerAllowRemote: allowRemote,
-            refinerSystemPrompt: prompt
-        )
+        editor.markSubmitted()
+        model.saveAndTestLLM(editor.draft.patch)
     }
 }
 
@@ -281,8 +301,6 @@ private struct DiagnosticsSettings: View {
                     Divider()
                     DiagnosticRow("辅助功能", value: model.permissions.accessibility.statusText)
                     Divider()
-                    DiagnosticRow("输入监控", value: model.permissions.inputMonitoring.statusText)
-                    Divider()
                     DiagnosticRow(
                         "权限主体",
                         value: model.permissions.subjectExecutable.isEmpty
@@ -292,11 +310,11 @@ private struct DiagnosticsSettings: View {
                     Divider()
                     DiagnosticRow("配置", value: snapshot.settings.configPath)
                     Divider()
-                    DiagnosticRow("最近延迟", value: latency(snapshot))
+                    DiagnosticRow("最近延迟", value: latency())
                 }
                 .textSelection(.enabled)
-                if let error = snapshot.service.runtime?.lastError { InlineError(message: error) }
-                if let report = (snapshot.service.runtime ?? snapshot.recentRuntime)?.lastLatency {
+                if let error = model.liveRuntime?.lastError { InlineError(message: error) }
+                if let report = model.activeRuntime?.lastLatency {
                     DisclosureGroup("查看分阶段耗时") {
                         VStack(spacing: 0) {
                             DiagnosticRow("录音", value: "\(report.captureMs) 毫秒")
@@ -324,8 +342,8 @@ private struct DiagnosticsSettings: View {
         }
     }
 
-    private func latency(_ snapshot: ControlSnapshot) -> String {
-        guard let value = (snapshot.service.runtime ?? snapshot.recentRuntime)?.lastLatency else { return "暂无" }
+    private func latency() -> String {
+        guard let value = model.activeRuntime?.lastLatency else { return "暂无" }
         return "松开到写入 \(value.stopToInsertedMs) 毫秒 · 总计 \(value.totalMs) 毫秒"
     }
 }

@@ -255,6 +255,7 @@ impl std::io::Write for HashWriter<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
 
     #[test]
     fn catalog_has_unique_names_and_valid_hashes() {
@@ -270,5 +271,104 @@ mod tests {
                 .iter()
                 .all(|other| other.file_name != artifact.file_name));
         }
+    }
+
+    #[tokio::test]
+    async fn download_resumes_a_partial_artifact_with_http_range() {
+        let payload = b"voice-model-payload";
+        let path = std::env::temp_dir().join(format!(
+            "voice-input-model-resume-{}-{}",
+            std::process::id(),
+            unix_test_nonce()
+        ));
+        std::fs::write(&path, &payload[..6]).unwrap();
+        let (url, server) = serve_once(payload, true, Some("range: bytes=6-"));
+        let artifact = test_artifact(url, payload.len() as u64);
+
+        download_with_resume(&artifact, &path).await.unwrap();
+
+        server.join().unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), payload);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn download_restarts_when_server_ignores_range() {
+        let payload = b"complete-model";
+        let path = std::env::temp_dir().join(format!(
+            "voice-input-model-restart-{}-{}",
+            std::process::id(),
+            unix_test_nonce()
+        ));
+        std::fs::write(&path, b"stale").unwrap();
+        let (url, server) = serve_once(payload, false, Some("range: bytes=5-"));
+        let artifact = test_artifact(url, payload.len() as u64);
+
+        download_with_resume(&artifact, &path).await.unwrap();
+
+        server.join().unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), payload);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    fn test_artifact(url: &'static str, size_bytes: u64) -> ModelArtifact {
+        ModelArtifact {
+            preset: "test",
+            file_name: "test.bin",
+            url,
+            size_bytes,
+            sha256: "unused",
+            description: "test",
+        }
+    }
+
+    fn serve_once(
+        payload: &'static [u8],
+        partial: bool,
+        expected_header: Option<&'static str>,
+    ) -> (&'static str, std::thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1_024];
+            loop {
+                let read = stream.read(&mut buffer).unwrap();
+                request.extend_from_slice(&buffer[..read]);
+                if read == 0 || request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let request = String::from_utf8_lossy(&request);
+            if let Some(header) = expected_header {
+                assert!(request.contains(header), "missing {header} in {request}");
+            }
+            let body = if partial { &payload[6..] } else { payload };
+            let status = if partial {
+                "206 Partial Content"
+            } else {
+                "200 OK"
+            };
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+        let url = Box::leak(format!("http://{address}/model.bin").into_boxed_str());
+        (url, server)
+    }
+
+    fn unix_test_nonce() -> u128 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
     }
 }

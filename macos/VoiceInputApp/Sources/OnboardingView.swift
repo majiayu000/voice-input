@@ -54,7 +54,7 @@ private enum OnboardingStep: Int, CaseIterable {
 struct OnboardingView: View {
     @ObservedObject var model: AppModel
     @State private var step: OnboardingStep = .privacy
-    @State private var trialText = "把光标放在这里，然后按住 Fn 说话。"
+    @State private var trialText = "把光标放在这里，然后按住当前快捷键说话。"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -106,10 +106,12 @@ struct OnboardingView: View {
                 if step == .launch {
                     Button("开始使用") { model.finishOnboarding() }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                         .disabled(!canContinue)
                 } else {
                     Button("继续") { move(1) }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
                         .disabled(!canContinue)
                 }
             }
@@ -141,13 +143,14 @@ struct OnboardingView: View {
 
     private var permissionStep: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("允许三项系统权限")
+            Text("允许两项系统权限")
                 .font(.system(size: 22, weight: .semibold))
-            Text("每项权限只用于下方写明的功能。授权后回到这里，状态会自动更新。")
+            Text("macOS 会显示“Voice Input Runtime”，它负责本地听写和写入文字。授权后回到这里，状态会自动更新。")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 8)
-            ForEach(PermissionKind.allCases) { kind in
+            ForEach(PermissionKind.setupCases) { kind in
                 PermissionRow(
                     kind: kind,
                     state: model.permissions.state(for: kind),
@@ -155,10 +158,12 @@ struct OnboardingView: View {
                     request: { model.request(kind) },
                     openSettings: { model.openPermissionSettings(kind) }
                 )
-                if kind != .inputMonitoring { Divider() }
+                if kind != PermissionKind.setupCases.last { Divider() }
             }
+            .disabled(model.isBusy)
             Button("重新检查权限") { Task { await model.refresh() } }
                 .padding(.top, 6)
+                .disabled(model.isBusy)
         }
     }
 
@@ -170,15 +175,19 @@ struct OnboardingView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 8)
-            ForEach(model.snapshot?.models ?? []) { item in
-                ModelRow(
-                    model: item,
-                    busy: model.isBusy,
-                    progress: model.downloadingPreset == item.preset ? model.modelProgress : nil
-                ) {
-                    model.installModel(item.preset)
+            if let models = model.snapshot?.models {
+                ForEach(models) { item in
+                    ModelRow(
+                        model: item,
+                        busy: model.isBusy,
+                        progress: model.downloadingPreset == item.preset ? model.modelProgress : nil
+                    ) {
+                        model.installModel(item.preset)
+                    }
+                    if item.id != models.last?.id { Divider() }
                 }
-                if item.id != model.snapshot?.models.last?.id { Divider() }
+            } else {
+                LoadingRows(rows: 3)
             }
             if model.isBusy, let label = model.busyLabel {
                 HStack(spacing: 8) {
@@ -194,15 +203,15 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("试着说一句")
                 .font(.system(size: 22, weight: .semibold))
-            Text("先把光标放进下面的文本框，然后按住 Fn 说话。松开后，文字应当出现在光标位置。")
+            Text("先把光标放进下面的文本框，然后按住 \(model.hotkeyDisplayName) 说话。松开后，文字应当出现在光标位置。")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
             TextEditor(text: $trialText)
                 .font(.system(size: 14))
                 .frame(height: 110)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color(nsColor: .separatorColor)))
-            StatusHeader(state: model.runtimeState)
-            if let text = model.activeRuntime?.lastText {
+            StatusHeader(state: model.runtimeState, detail: model.runtimeDetail)
+            if let text = model.liveRuntime?.lastText {
                 Label("刚刚写入：\(text)", systemImage: "checkmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(.green)
@@ -218,7 +227,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("已经可以使用")
                 .font(.system(size: 24, weight: .semibold))
-            Text("Voice Input 平时只留在菜单栏。看到“听”就表示它在那里，按住 Fn 即可开始。")
+            Text("Voice Input 平时只留在菜单栏。看到“听”就表示它在那里，按住 \(model.hotkeyDisplayName) 即可开始。")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 500, alignment: .leading)
@@ -237,7 +246,7 @@ struct OnboardingView: View {
         switch step {
         case .permissions: model.permissionsReady
         case .model: model.snapshot?.models.contains(where: \.active) == true && !model.isBusy
-        case .trial: model.runtimeState == .ready || model.activeRuntime?.sessionsCompleted ?? 0 > 0
+        case .trial: model.runtimeState == .ready || model.liveRuntime?.sessionsCompleted ?? 0 > 0
         default: true
         }
     }

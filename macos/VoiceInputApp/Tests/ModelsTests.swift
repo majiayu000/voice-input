@@ -73,4 +73,83 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(object["audible_feedback"] as? Bool, false)
         XCTAssertNil(object["language"])
     }
+
+    func testLLMDraftValidationAndPatchTrimming() throws {
+        var draft = LLMSettingsDraft()
+        draft.enabled = true
+        draft.endpoint = "   "
+        draft.model = "local-model"
+        XCTAssertFalse(draft.isValid)
+
+        draft.endpoint = "  http://127.0.0.1:11434/v1  "
+        draft.keyEnvironment = "  LOCAL_LLM_API_KEY  "
+        XCTAssertTrue(draft.isValid)
+
+        let object = try JSONSerialization.jsonObject(
+            with: JSONEncoder.voiceInput.encode(draft.patch)
+        ) as! [String: Any]
+        XCTAssertEqual(object["refiner_base_url"] as? String, "http://127.0.0.1:11434/v1")
+        XCTAssertEqual(object["refiner_api_key_env"] as? String, "LOCAL_LLM_API_KEY")
+    }
+
+    func testLLMDraftRejectsUnsafeRemoteEndpointsBeforeSave() {
+        var draft = LLMSettingsDraft()
+        draft.enabled = true
+        draft.model = "remote-model"
+        draft.endpoint = "http://example.com/v1"
+
+        XCTAssertEqual(
+            draft.validationMessage,
+            "远程地址需要先开启“允许 HTTPS 远程地址”。"
+        )
+        draft.allowRemote = true
+        XCTAssertEqual(draft.validationMessage, "远程服务必须使用 HTTPS。")
+        draft.endpoint = "https://example.com/v1"
+        XCTAssertNil(draft.validationMessage)
+        XCTAssertTrue(draft.isRemoteEndpoint)
+    }
+
+    func testDiagnosticExportRedactsTranscriptAndSecrets() throws {
+        let payload = #"""
+        {
+          "recent_runtime": {"last_text": "私密听写 🧪", "last_error": null},
+          "settings": {"refiner_api_key_env": "LOCAL_KEY", "api_key": "secret-value"},
+          "nested": [{"authorization": "Bearer secret"}]
+        }
+        """#.data(using: .utf8)!
+
+        let output = try DiagnosticExport.sanitizeJSON(payload)
+
+        XCTAssertFalse(output.contains("私密听写"))
+        XCTAssertFalse(output.contains("secret-value"))
+        XCTAssertFalse(output.contains("Bearer secret"))
+        XCTAssertTrue(output.contains("LOCAL_KEY"))
+        XCTAssertTrue(output.contains("<redacted>"))
+    }
+
+    func testRuntimeCommandDrainsLargeOutputWithoutPipeDeadlock() throws {
+        let data = try RuntimeBridge.runSynchronously(
+            ["-c", "dd if=/dev/zero bs=1024 count=512 2>/dev/null | tr '\\0' x"],
+            input: nil,
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            timeout: 3
+        )
+
+        XCTAssertEqual(data.count, 512 * 1_024)
+    }
+
+    func testRuntimeCommandHasBoundedTimeout() throws {
+        XCTAssertThrowsError(
+            try RuntimeBridge.runSynchronously(
+                ["2"],
+                input: nil,
+                executable: URL(fileURLWithPath: "/bin/sleep"),
+                timeout: 0.05
+            )
+        ) { error in
+            guard case RuntimeBridgeError.commandTimedOut = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+    }
 }

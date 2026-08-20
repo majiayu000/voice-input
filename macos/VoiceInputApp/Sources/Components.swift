@@ -27,6 +27,7 @@ struct StatusMark: View {
 
 struct StatusHeader: View {
     let state: AppRuntimeState
+    var detail: String? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -37,7 +38,7 @@ struct StatusHeader: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(state.title)
                     .font(.system(size: 13, weight: .semibold))
-                Text(state.detail)
+                Text(detail ?? state.detail)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -148,8 +149,8 @@ struct PermissionRow: View {
                 Text(state.statusText)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                if state.canRequest {
-                    Button("允许", action: request)
+                if state.canRequest || state == .unknown {
+                    Button(state == .unknown ? "重试" : "允许", action: request)
                 }
                 Button("打开设置", action: openSettings)
             }

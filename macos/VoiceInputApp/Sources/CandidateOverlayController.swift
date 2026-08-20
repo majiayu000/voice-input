@@ -16,9 +16,10 @@ enum CandidateState: Equatable {
         }
     }
 
-    var detail: String {
+    func detail(hotkey: String?) -> String {
         switch self {
-        case .listening: "本机 · 松开 Fn 写入"
+        case .listening:
+            "本机 · 松开 \(hotkey == "fn" ? "Fn" : "Control + Shift + Space") 写入"
         case .recognizing: "正在整理文字"
         case .completed: "文字已到当前光标"
         }
@@ -65,6 +66,7 @@ final class CandidateOverlayController {
         let elapsed = runtime.map { max(0, Int(Date().timeIntervalSince1970 * 1_000) - Int($0.updatedAtMs)) }
         panel.contentView = NSHostingView(rootView: CandidateStrip(
             state: state,
+            hotkey: runtime?.hotkey,
             elapsedMilliseconds: elapsed,
             completedText: state == .completed ? runtime?.lastText : nil
         ))
@@ -177,6 +179,7 @@ final class CandidateOverlayController {
 
 private struct CandidateStrip: View {
     let state: CandidateState
+    let hotkey: String?
     let elapsedMilliseconds: Int?
     let completedText: String?
 
@@ -186,7 +189,7 @@ private struct CandidateStrip: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(state.title)
                     .font(.system(size: 13, weight: .semibold))
-                Text(completedText.map { "“\($0)”" } ?? state.detail)
+                Text(completedText.map { "“\($0)”" } ?? state.detail(hotkey: hotkey))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -208,7 +211,7 @@ private struct CandidateStrip: View {
         .background(.regularMaterial)
         .overlay(Rectangle().stroke(state.color.opacity(0.9), lineWidth: 1))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(state.title)，\(state.detail)")
+        .accessibilityLabel("\(state.title)，\(state.detail(hotkey: hotkey))")
     }
 
     private var elapsedLabel: String {

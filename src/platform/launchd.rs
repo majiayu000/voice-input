@@ -1,4 +1,7 @@
-use crate::service::{ServiceError, ServiceManager, ServicePaths, ServiceStatus, SERVICE_LABEL};
+use crate::service::{
+    ServiceError, ServiceManager, ServicePaths, ServiceStatus, LEGACY_RUNTIME_APP_BUNDLE_NAME,
+    SERVICE_LABEL,
+};
 use crate::status::RuntimeSnapshot;
 use sha2::{Digest, Sha256};
 use std::fs::{OpenOptions, Permissions};
@@ -111,9 +114,10 @@ impl ServiceManager for LaunchdServiceManager {
                 0o644,
             )?;
             copy_executable_atomically(executable, &self.paths.binary)?;
-            sign_app_bundle(&self.paths.app_bundle, &entitlements)?;
             write_atomically(&fingerprint, source_fingerprint.as_bytes(), 0o644)?;
+            sign_app_bundle(&self.paths.app_bundle, &entitlements)?;
         }
+        remove_directory_if_exists(&self.paths.data_dir.join(LEGACY_RUNTIME_APP_BUNDLE_NAME))?;
         remove_if_exists(&self.paths.data_dir.join("bin/voice-input"))?;
         write_atomically(
             &self.paths.launch_agent,
@@ -175,6 +179,7 @@ impl ServiceManager for LaunchdServiceManager {
         }
         remove_if_exists(&self.paths.launch_agent)?;
         remove_directory_if_exists(&self.paths.app_bundle)?;
+        remove_directory_if_exists(&self.paths.data_dir.join(LEGACY_RUNTIME_APP_BUNDLE_NAME))?;
         remove_if_exists(&self.paths.runtime_status)?;
         self.status()
     }
@@ -264,6 +269,15 @@ fn installed_runtime_is_current(paths: &ServicePaths, source_fingerprint: &str) 
             .is_ok_and(|value| value == render_runtime_entitlements())
         && std::fs::read_to_string(fingerprint)
             .is_ok_and(|value| value.trim() == source_fingerprint)
+        && app_bundle_signature_is_valid(&paths.app_bundle)
+}
+
+fn app_bundle_signature_is_valid(app_bundle: &Path) -> bool {
+    Command::new("/usr/bin/codesign")
+        .args(["--verify", "--deep", "--strict"])
+        .arg(app_bundle)
+        .output()
+        .is_ok_and(|output| output.status.success())
 }
 
 fn file_sha256(path: &Path) -> Result<String, ServiceError> {
@@ -476,6 +490,8 @@ mod tests {
             paths: paths.clone(),
             domain: "gui/0".to_owned(),
         };
+        let legacy_bundle = paths.data_dir.join(LEGACY_RUNTIME_APP_BUNDLE_NAME);
+        std::fs::create_dir_all(&legacy_bundle).unwrap();
 
         let status = manager.install(&source).unwrap();
 
@@ -483,6 +499,7 @@ mod tests {
         assert_eq!(std::fs::read(&paths.binary).unwrap(), b"voice-input-test");
         assert!(paths.stdout_log.parent().unwrap().is_dir());
         assert!(paths.launch_agent.is_file());
+        assert!(!legacy_bundle.exists());
         let app_info =
             std::fs::read_to_string(paths.app_bundle.join("Contents/Info.plist")).unwrap();
         assert!(app_info.contains("<string>com.lifcc.voiceinput.runtime</string>"));
@@ -494,6 +511,7 @@ mod tests {
         )
         .unwrap();
         assert!(entitlements.contains("<key>com.apple.security.device.audio-input</key>"));
+        assert!(app_bundle_signature_is_valid(&paths.app_bundle));
         let mode = std::fs::metadata(&paths.binary)
             .unwrap()
             .permissions()

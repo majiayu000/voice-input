@@ -103,6 +103,72 @@ struct SettingsPatch: Encodable {
     var vadEnabled: Bool?
 }
 
+struct LLMSettingsDraft: Equatable {
+    var enabled = false
+    var endpoint = "http://127.0.0.1:11434/v1"
+    var model = ""
+    var keyEnvironment = ""
+    var allowRemote = false
+    var prompt = ""
+
+    init() {}
+
+    init(settings: ControlSettings) {
+        enabled = settings.refinerEnabled
+        endpoint = settings.refinerBaseUrl
+        model = settings.refinerModel
+        keyEnvironment = settings.refinerApiKeyEnv ?? ""
+        allowRemote = settings.refinerAllowRemote
+        prompt = settings.refinerSystemPrompt
+    }
+
+    var isValid: Bool {
+        validationMessage == nil
+    }
+
+    var validationMessage: String? {
+        guard enabled else { return nil }
+        if model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写模型名称。"
+        }
+        guard let components = URLComponents(
+            string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        ), let scheme = components.scheme?.lowercased(),
+        let host = components.host?.lowercased(),
+        ["http", "https"].contains(scheme) else {
+            return "服务地址必须是完整的 HTTP 或 HTTPS 地址。"
+        }
+        if components.user != nil || components.password != nil {
+            return "服务地址不能包含用户名或密码。"
+        }
+        if !Self.isLoopback(host) {
+            if !allowRemote { return "远程地址需要先开启“允许 HTTPS 远程地址”。" }
+            if scheme != "https" { return "远程服务必须使用 HTTPS。" }
+        }
+        return nil
+    }
+
+    var isRemoteEndpoint: Bool {
+        guard let host = URLComponents(string: endpoint)?.host?.lowercased() else { return false }
+        return !Self.isLoopback(host)
+    }
+
+    var patch: SettingsPatch {
+        SettingsPatch(
+            refinerEnabled: enabled,
+            refinerBaseUrl: endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
+            refinerModel: model.trimmingCharacters(in: .whitespacesAndNewlines),
+            refinerApiKeyEnv: keyEnvironment.trimmingCharacters(in: .whitespacesAndNewlines),
+            refinerAllowRemote: allowRemote,
+            refinerSystemPrompt: prompt
+        )
+    }
+
+    private static func isLoopback(_ host: String) -> Bool {
+        host == "localhost" || host == "::1" || host.hasPrefix("127.")
+    }
+}
+
 enum AppRuntimeState: Equatable {
     case needsSetup(String)
     case paused
@@ -127,10 +193,10 @@ enum AppRuntimeState: Equatable {
     var detail: String {
         switch self {
         case .needsSetup(let reason): reason
-        case .paused: "恢复后即可按住 Fn 说话"
+        case .paused: "恢复后即可按住当前快捷键说话"
         case .starting: "第一次加载可能需要十几秒"
-        case .ready: "按住 Fn 说话，松开后写入"
-        case .listening: "松开 Fn 后写入当前光标"
+        case .ready: "按住当前快捷键说话，松开后写入"
+        case .listening: "松开当前快捷键后写入当前光标"
         case .recognizing: "文字仍在这台 Mac 上处理"
         case .error(let reason): reason
         }

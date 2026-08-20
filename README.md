@@ -58,10 +58,11 @@ Build and open a signed local application:
 ```
 
 After launch, look for the square `听` mark in the macOS menu bar. The first-run
-guide explains privacy, requests microphone / Accessibility / Input Monitoring
-permissions, lets the user select a local model, and provides a real Fn
-dictation trial. The application does not appear in the Dock. The built artifact
-is `dist/Voice Input.app`.
+guide explains privacy, requests microphone and Accessibility permissions from
+the installed runtime identity, lets the user select a local model, and provides
+a real dictation trial with the configured hotkey. Accessibility covers both
+text insertion and the read-only Fn event tap. The application does not appear
+in the Dock. The built artifact is `dist/Voice Input.app`.
 
 Development builds use ad-hoc signing. A distributable build should set
 `VOICE_INPUT_CODESIGN_IDENTITY` to a stable Apple Development or Developer ID
@@ -86,11 +87,18 @@ commands whose field names are versioned by `schema_version`:
 ```bash
 voice-input control snapshot
 printf '%s' '{"hotkey":"fn","language":"zh"}' | voice-input control apply
+voice-input permission snapshot
 ```
 
 `control test-refiner` performs a user-initiated OpenAI-compatible connection
 probe with failure bypass disabled, so the settings page cannot report a false
 success when the endpoint is unavailable.
+
+The menu-bar app reads the small atomic runtime status file every 125 ms, so
+recording and recognition feedback does not wait for a CLI process. Service,
+model, configuration, and permission state use a slower five-second control
+refresh. “Copy diagnostics” redacts recent dictated text and defensive secret
+fields before writing anything to the pasteboard.
 
 `model install` downloads into the application data directory, resumes an
 interrupted HTTP transfer, verifies the expected size and SHA-256, atomically
@@ -99,15 +107,17 @@ committed to the repository or silently downloaded when the daemon starts.
 
 `doctor --prompt-accessibility` opens the macOS Accessibility permission prompt.
 For an installed service, run the installed helper once so macOS associates the
-permission with the stable `Voice Input` bundle rather than the terminal:
+permission with the stable `Voice Input Runtime` bundle rather than the GUI or
+terminal:
 
 ```bash
-"$HOME/Library/Application Support/voice-input/Voice Input.app/Contents/MacOS/voice-input" doctor --prompt-accessibility
+"$HOME/Library/Application Support/voice-input/Voice Input Runtime.app/Contents/MacOS/voice-input" doctor --prompt-accessibility
 ```
 
-Microphone permission is requested by macOS the first time the signed app
-container opens the input device. Both permissions require an explicit user
-choice in System Settings; the installer never edits the TCC database.
+The GUI invokes `permission snapshot` and `permission request` through the
+installed runtime executable, so the status shown on screen belongs to the same
+identity that launchd runs. Permission choices remain explicit user actions in
+System Settings; the installer never edits the TCC database.
 
 ## Run as a user service
 
@@ -121,11 +131,13 @@ cargo build --release -p voice-input
 ```
 
 `install` writes the default config when needed, builds an ad-hoc signed
-`~/Library/Application Support/voice-input/Voice Input.app` container with a
+`~/Library/Application Support/voice-input/Voice Input Runtime.app` container with a
 stable bundle identifier and microphone usage declaration, and writes
 `~/Library/LaunchAgents/com.lifcc.voiceinput.plist`. The LaunchAgent points at the
-bundle's helper; this gives macOS a stable privacy-permission subject instead of
-running an anonymous copied CLI. It does not start itself at login; the menu-bar
+bundle's `com.lifcc.voiceinput.runtime` executable; this gives macOS one distinct,
+stable privacy-permission subject instead of conflating the GUI and daemon.
+Installing identical bytes is idempotent and does not re-sign that subject.
+It does not start itself at login; the menu-bar
 application owns that user preference through `SMAppService` and explicitly
 starts the helper when it launches. `start` bootstraps and kickstarts the job or
 restarts it when already loaded. Runtime health is atomically
@@ -255,6 +267,10 @@ Loopback is allowed by default. A non-loopback endpoint requires both HTTPS and
 of an accidental URL change. API key values are read from the named environment
 variable and never stored in TOML. `failure_mode = "bypass"` returns the raw ASR
 text on timeout or provider failure; `"fail"` prevents insertion instead.
+For a launchd-managed runtime, that environment variable must be supplied to
+the LaunchAgent environment by the operator; keyless loopback services work
+without this advanced setup. A Keychain-backed credential flow is not part of
+the current local-first GUI.
 
 ## Provider boundary
 
@@ -290,7 +306,7 @@ The boundary and lifecycle contracts are documented in
 
 - macOS only;
 - `Control+Shift+Space` remains the default; `hotkey = "fn"` uses the native
-  event-tap path and requires Accessibility/Input Monitoring permission;
+  event-tap path covered by the required Accessibility permission;
 - native microphone rates are resampled to 16 kHz on a dedicated high-quality
   sinc-resampler thread;
 - generated output is plain text, although rich/image/file clipboard contents
