@@ -3,6 +3,47 @@ import ApplicationServices
 import AVFoundation
 import CoreGraphics
 
+enum SystemPermissionState: String, Codable, Equatable {
+    case notDetermined = "not_determined"
+    case denied
+    case restricted
+    case authorized
+    case unknown
+
+    var canRequest: Bool { self == .notDetermined }
+    var isAuthorized: Bool { self == .authorized }
+}
+
+struct PermissionStatusSnapshot: Codable, Equatable {
+    var microphone: SystemPermissionState
+    var accessibility: SystemPermissionState
+    var inputMonitoring: SystemPermissionState
+
+    func state(for kind: PermissionKind) -> SystemPermissionState {
+        switch kind {
+        case .microphone: microphone
+        case .accessibility: accessibility
+        case .inputMonitoring: inputMonitoring
+        }
+    }
+
+    func isReady(for requirements: PermissionRequirements) -> Bool {
+        requirements.required.allSatisfy { state(for: $0).isAuthorized }
+    }
+}
+
+struct PermissionRequirements: Equatable {
+    let required: [PermissionKind]
+
+    init(hotkey: String) {
+        var required: [PermissionKind] = [.microphone, .accessibility]
+        if hotkey == "fn" {
+            required.append(.inputMonitoring)
+        }
+        self.required = required
+    }
+}
+
 struct PermissionSnapshot: Equatable {
     var microphone: Bool
     var accessibility: Bool
