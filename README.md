@@ -64,10 +64,12 @@ a real dictation trial with the configured hotkey. Accessibility covers both
 text insertion and the read-only Fn event tap. The application does not appear
 in the Dock. The built artifact is `dist/Voice Input.app`.
 
-Development builds use ad-hoc signing. A distributable build should set
-`VOICE_INPUT_CODESIGN_IDENTITY` or `APPLE_SIGNING_IDENTITY` to a Developer ID
-Application identity before running the build script. A stable identity matters because
-macOS privacy grants are attached to the signed application identity.
+Development builds use ad-hoc signing. Tagged GitHub Releases fail closed on
+Developer ID signing and App Store Connect notarization. A local distributable
+build should set `VOICE_INPUT_CODESIGN_IDENTITY` or `APPLE_SIGNING_IDENTITY` to
+a Developer ID Application identity before running the build script. A stable
+identity matters because macOS privacy grants are attached to the signed
+application identity.
 
 Run the complete Rust and Swift verification suite with:
 
