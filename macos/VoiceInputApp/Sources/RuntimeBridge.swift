@@ -105,7 +105,7 @@ actor RuntimeBridge {
         timeout: Duration
     ) async throws -> Data {
         let identifier = UUID().uuidString.lowercased()
-        let label = "com.lifcc.voiceinput.permission.\(identifier)"
+        let label = "com.starlight.voiceinput.permission.\(identifier)"
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(label, isDirectory: true)
         let output = directory.appendingPathComponent("stdout.json")

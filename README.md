@@ -65,8 +65,8 @@ text insertion and the read-only Fn event tap. The application does not appear
 in the Dock. The built artifact is `dist/Voice Input.app`.
 
 Development builds use ad-hoc signing. A distributable build should set
-`VOICE_INPUT_CODESIGN_IDENTITY` to a stable Apple Development or Developer ID
-identity before running the build script. A stable identity matters because
+`VOICE_INPUT_CODESIGN_IDENTITY` or `APPLE_SIGNING_IDENTITY` to a Developer ID
+Application identity before running the build script. A stable identity matters because
 macOS privacy grants are attached to the signed application identity.
 
 Run the complete Rust and Swift verification suite with:
@@ -133,8 +133,8 @@ cargo build --release -p voice-input
 `install` writes the default config when needed, builds an ad-hoc signed
 `~/Library/Application Support/voice-input/Voice Input Runtime.app` container with a
 stable bundle identifier and microphone usage declaration, and writes
-`~/Library/LaunchAgents/com.lifcc.voiceinput.plist`. The LaunchAgent points at the
-bundle's `com.lifcc.voiceinput.runtime` executable; this gives macOS one distinct,
+`~/Library/LaunchAgents/com.starlight.voiceinput.plist`. The LaunchAgent points at the
+bundle's `com.starlight.voiceinput.runtime` executable; this gives macOS one distinct,
 stable privacy-permission subject instead of conflating the GUI and daemon.
 Installing identical bytes is idempotent and does not re-sign that subject.
 It does not start itself at login; the menu-bar
@@ -147,8 +147,8 @@ directory. `benchmark` summarizes the history; `benchmark --input <path>` can
 analyze an exported JSONL file.
 
 Development installs use ad-hoc signing. Set
-`VOICE_INPUT_CODESIGN_IDENTITY` to a persistent Apple Development or Developer
-ID identity for a distributable build whose designated requirement survives
+`VOICE_INPUT_CODESIGN_IDENTITY` or `APPLE_SIGNING_IDENTITY` to a Developer ID
+Application identity for a distributable build whose designated requirement survives
 binary updates. With ad-hoc signing, reinstalling a changed binary changes its
 code hash and macOS may require permission approval again.
 

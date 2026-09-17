@@ -592,7 +592,7 @@ mod tests {
         assert!(first.setData_forType(&NSData::with_bytes(b"hello"), &plain));
         assert!(first.setData_forType(&NSData::with_bytes(b"<b>hello</b>"), &html));
         let second = NSPasteboardItem::new();
-        let custom = NSString::from_str("com.lifcc.voiceinput.test");
+        let custom = NSString::from_str("com.starlight.voiceinput.test");
         assert!(second.setData_forType(&NSData::with_bytes(&[0, 1, 2, 255]), &custom));
         let objects: Vec<Retained<ProtocolObject<dyn NSPasteboardWriting>>> = vec![
             ProtocolObject::from_retained(first),

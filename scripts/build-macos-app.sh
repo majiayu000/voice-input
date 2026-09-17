@@ -8,12 +8,25 @@ output_dir="$project_root/dist"
 final_app="$output_dir/Voice Input.app"
 staging_root="$(mktemp -d "$project_root/.voice-input-app.XXXXXX")"
 staging_app="$staging_root/Voice Input.app"
-signing_identity="${VOICE_INPUT_CODESIGN_IDENTITY:--}"
+signing_identity="${VOICE_INPUT_CODESIGN_IDENTITY:-${APPLE_SIGNING_IDENTITY:--}}"
 
 cleanup() {
   /bin/rm -rf "$staging_root"
 }
 trap cleanup EXIT
+
+if [[ "${VOICE_INPUT_REQUIRE_DEVELOPER_ID:-}" == "1" ]]; then
+  if [[ "$signing_identity" == "-" || "$signing_identity" != Developer\ ID\ Application:* ]]; then
+    echo "VOICE_INPUT_REQUIRE_DEVELOPER_ID=1 needs APPLE_SIGNING_IDENTITY or VOICE_INPUT_CODESIGN_IDENTITY to be a Developer ID Application identity" >&2
+    exit 1
+  fi
+fi
+
+if [[ "$signing_identity" == "-" ]]; then
+  timestamp_args=(--timestamp=none)
+else
+  timestamp_args=(--timestamp)
+fi
 
 cd "$project_root"
 cargo build --release
@@ -38,12 +51,15 @@ mkdir -p "$staging_app/Contents/Resources"
 chmod 755 "$staging_app/Contents/MacOS/Voice Input" "$staging_app/Contents/Helpers/voice-input"
 
 /usr/bin/codesign --force --sign "$signing_identity" \
-  --identifier com.lifcc.voiceinput.runtime \
+  --identifier com.starlight.voiceinput.runtime \
   --options runtime \
   --entitlements "$package_dir/Resources/Runtime.entitlements" \
-  --timestamp=none \
+  "${timestamp_args[@]}" \
   "$staging_app/Contents/Helpers/voice-input"
-/usr/bin/codesign --force --sign "$signing_identity" --options runtime --timestamp=none \
+/usr/bin/codesign --force --sign "$signing_identity" \
+  --identifier com.starlight.voiceinput \
+  --options runtime \
+  "${timestamp_args[@]}" \
   "$staging_app"
 /usr/bin/codesign --verify --deep --strict "$staging_app"
 /usr/bin/plutil -lint "$staging_app/Contents/Info.plist"

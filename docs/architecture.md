@@ -176,7 +176,7 @@ lands or their independent release/build cost becomes material.
 - Failure to acquire the instance lease or initialize audio/hotkeys is fatal at
   startup and visible through service status/logs.
 - The installed helper lives inside a signed app container with the dedicated
-  `com.lifcc.voiceinput.runtime` bundle identifier, Audio Input entitlement, and
+  `com.starlight.voiceinput.runtime` bundle identifier, Audio Input entitlement, and
   microphone usage string. The GUI reads and requests permissions through that
   exact executable. Accessibility and microphone consent remain explicit user
   decisions; installation never mutates macOS TCC data.

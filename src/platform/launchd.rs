@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
-const RUNTIME_BUNDLE_ID: &str = "com.lifcc.voiceinput.runtime";
+const RUNTIME_BUNDLE_ID: &str = "com.starlight.voiceinput.runtime";
 const RUNTIME_ENTITLEMENTS_FILE: &str = "Runtime.entitlements";
 const SOURCE_FINGERPRINT_FILE: &str = "source.sha256";
 
@@ -233,8 +233,14 @@ fn render_runtime_entitlements() -> &'static str {
 }
 
 fn sign_app_bundle(app_bundle: &Path, entitlements: &Path) -> Result<(), ServiceError> {
-    let identity =
-        std::env::var("VOICE_INPUT_CODESIGN_IDENTITY").unwrap_or_else(|_| "-".to_owned());
+    let identity = std::env::var("VOICE_INPUT_CODESIGN_IDENTITY")
+        .or_else(|_| std::env::var("APPLE_SIGNING_IDENTITY"))
+        .unwrap_or_else(|_| "-".to_owned());
+    let timestamp = if identity == "-" {
+        "--timestamp=none"
+    } else {
+        "--timestamp"
+    };
     let output = Command::new("/usr/bin/codesign")
         .args([
             "--force",
@@ -244,7 +250,7 @@ fn sign_app_bundle(app_bundle: &Path, entitlements: &Path) -> Result<(), Service
             "runtime",
             "--entitlements",
             entitlements.to_string_lossy().as_ref(),
-            "--timestamp=none",
+            timestamp,
         ])
         .arg(app_bundle)
         .output()?;
@@ -450,7 +456,7 @@ mod tests {
 
         let plist = render_plist(&paths);
 
-        assert!(plist.contains("com.lifcc.voiceinput"));
+        assert!(plist.contains("com.starlight.voiceinput"));
         assert!(plist.contains("a&amp;b.toml"));
         assert!(plist.contains("<string>daemon</string>"));
         assert!(plist.contains("<key>RunAtLoad</key>\n  <false/>"));
@@ -461,7 +467,7 @@ mod tests {
     fn launchctl_status_parser_extracts_operational_fields() {
         let details = parse_launchctl_print(
             r#"
-                gui/501/com.lifcc.voiceinput = {
+                gui/501/com.starlight.voiceinput = {
                     state = running
                     pid = 42001
                     last exit code = 0
@@ -502,7 +508,7 @@ mod tests {
         assert!(!legacy_bundle.exists());
         let app_info =
             std::fs::read_to_string(paths.app_bundle.join("Contents/Info.plist")).unwrap();
-        assert!(app_info.contains("<string>com.lifcc.voiceinput.runtime</string>"));
+        assert!(app_info.contains("<string>com.starlight.voiceinput.runtime</string>"));
         assert!(app_info.contains("<key>NSMicrophoneUsageDescription</key>"));
         let entitlements = std::fs::read_to_string(
             paths

@@ -9,7 +9,7 @@
   <key>CFBundleExecutable</key>
   <string>Voice Input</string>
   <key>CFBundleIdentifier</key>
-  <string>com.lifcc.voiceinput</string>
+  <string>com.starlight.voiceinput</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

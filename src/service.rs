@@ -2,7 +2,7 @@ use crate::status::RuntimeSnapshot;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-pub const SERVICE_LABEL: &str = "com.lifcc.voiceinput";
+pub const SERVICE_LABEL: &str = "com.starlight.voiceinput";
 pub const RUNTIME_APP_BUNDLE_NAME: &str = "Voice Input Runtime.app";
 pub const LEGACY_RUNTIME_APP_BUNDLE_NAME: &str = "Voice Input.app";
 
