@@ -4,6 +4,23 @@
 whisper.cpp through Rust, keeps the selected model and inference state warm on
 a dedicated worker, and exposes an optional OpenAI-compatible refinement stage.
 
+## Quick start on macOS
+
+Build the native menu bar app from source with Rust, CMake and Swift 6
+toolchain on macOS 14+. The first-run guide covers permissions, local model
+selection and a dictation trial.
+
+```bash
+git clone https://github.com/majiayu000/voice-input.git
+cd voice-input
+brew install cmake
+./scripts/run-macos-app.sh
+```
+
+[Menu bar app](#macos-menu-bar-app) · [CLI diagnostics](#build-and-diagnose) ·
+[Architecture](docs/architecture.md) ·
+[Current boundaries](#current-boundaries)
+
 `Voice Input` is a neutral engineering name, not a finalized product brand.
 Product-facing identifiers are isolated in the CLI/service composition layer so
 they can be replaced without coupling the ASR, audio, or refinement core.
