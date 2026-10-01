@@ -18,12 +18,29 @@ brew install cmake
 ```
 
 [Menu bar app](#macos-menu-bar-app) · [CLI diagnostics](#build-and-diagnose) ·
-[Architecture](docs/architecture.md) ·
+[Dictation troubleshooting](#dictation-troubleshooting) · [Architecture](docs/architecture.md) ·
 [Current boundaries](#current-boundaries)
 
 `Voice Input` is a neutral engineering name, not a finalized product brand.
 Product-facing identifiers are isolated in the CLI/service composition layer so
 they can be replaced without coupling the ASR, audio, or refinement core.
+
+## Dictation troubleshooting
+
+Start with the menu-bar app's first-run trial. The microphone, local ASR and
+insertion are separate stages; use the existing diagnostics to narrow a failure.
+
+| Question or symptom | Next step |
+|---|---|
+| Can I dictate without a cloud account? | Whisper ASR runs on-device. Initial model installation needs a download; with the model installed and default identity refinement, dictation does not require an LLM endpoint. See [local ASR](#run-local-asr). |
+| No microphone capture or hotkey response | Run `doctor` and inspect microphone/Accessibility permission for the installed runtime identity. See [menu-bar setup](#macos-menu-bar-app) and [hotkey configuration](#hotkey-insertion-and-feedback). |
+| Capture works but transcription is empty or wrong | Check the selected model and language. Test a recording with `transcribe` to separate ASR from hotkeys and insertion; see [build and diagnose](#build-and-diagnose). |
+| Text is recognized but does not appear in another app | Check Accessibility permission and the focused editable field; follow [the insertion-only diagnostic](#verify-the-os-path-without-asr). Run insertion probes in a disposable text field. |
+| I want a transcription trial without pasting into another app | `dictate --seconds 5 --stdout` runs the configured ASR/refinement path and prints text. `daemon --mock-text "smoke test" --stdout` checks the scripted OS path without real recognition or insertion. |
+| Will refinement send recognized text to a server? | Identity refinement is the default. An explicitly configured OpenAI-compatible endpoint receives text; remote endpoints require opt-in. Review [optional LLM refinement](#optional-llm-refinement) before enabling it. |
+
+A successful mock-text test does not prove microphone recognition quality, and
+a successful transcription does not prove insertion permissions.
 
 ## Implemented foundation
 
