@@ -220,7 +220,7 @@ private struct TextSettings: View {
         SettingsPage(title: "文本处理") {
             Toggle("使用 OpenAI 兼容服务润色文字", isOn: $editor.draft.enabled)
                 .toggleStyle(.switch)
-            Text(editor.draft.enabled ? "识别文字会发送到下方服务。使用本机地址时，文字不会离开这台 Mac。" : "当前使用原始识别结果，不产生 LLM 网络请求。")
+            Text(editor.draft.enabled ? "保存并生效后，识别文字会发送到下方服务。本机地址仅表示首个接收方；服务是否转发或保存文字取决于其配置。" : "保存并生效后，听写将使用原始识别结果，不发起 LLM 润色请求。")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             Form {

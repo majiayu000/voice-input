@@ -11,7 +11,7 @@ enum CandidateState: Equatable {
     var title: String {
         switch self {
         case .listening: "正在听"
-        case .recognizing: "正在本机识别"
+        case .recognizing: "正在处理听写"
         case .completed: "已写入"
         }
     }

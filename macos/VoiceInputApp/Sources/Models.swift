@@ -183,7 +183,7 @@ enum AppRuntimeState: Equatable {
         case .starting: "正在准备本地模型"
         case .ready: "本机输入法 · 就绪"
         case .listening: "正在听"
-        case .recognizing: "正在本机识别"
+        case .recognizing: "正在处理听写"
         case .error: "需要处理"
         }
     }
@@ -194,7 +194,7 @@ enum AppRuntimeState: Equatable {
         case .starting: "第一次加载可能需要十几秒"
         case .ready: "按住当前快捷键说话，松开后写入"
         case .listening: "松开当前快捷键后写入当前光标"
-        case .recognizing: "文字仍在这台 Mac 上处理"
+        case .recognizing: "正在完成识别、文本处理和写入"
         case .error(let reason): reason
         }
     }
